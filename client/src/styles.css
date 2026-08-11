@@ -1,0 +1,285 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+/* Figma design tokens — Login Page Design (node 1-2) */
+@theme {
+  /* Layout — pixel-accurate from Figma */
+  --sidebar-width: 56px;
+  --sidebar-width-expanded: 256px;
+  --header-height: 56px;
+  --content-padding: 24px;
+  --card-padding: 16px;
+  --spacing-page: 1.5rem;
+  --spacing-section: 1.5rem;
+  --spacing-card: 1rem;
+  /* Gunakan nama berbeda dari --spacing-page agar utilitas max-w tidak
+     diselesaikan Tailwind ke spacing 1.5rem. */
+  --container-app: 96rem;
+  --container-content: 80rem;
+  --container-form: 48rem;
+  /* Shape roles */
+  --radius-control: 8px;
+  --radius-surface: 12px;
+  --radius-overlay: 12px;
+  /* Radius — from Figma */
+  --radius-sm: 2px;
+  --radius: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  --shadow-surface: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-raised: 0 4px 12px rgb(15 23 42 / 0.08);
+  --shadow-overlay: 0 20px 32px rgb(15 23 42 / 0.16);
+  /* Z-index */
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-tooltip: 30;
+  --z-overlay: 40;
+  --z-modal: 50;
+  /* Colors — from Figma API (r,g,b 0-1 → hex) */
+  /* Semantic color roles */
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-surface-muted: #f1f5f9;
+  --color-surface-strong: #cbd5e1;
+  --color-foreground: #0f172a;
+  --color-secondary-foreground: #475569;
+  --color-muted-foreground: #64748b;
+  --color-border-strong: #64748b;
+  --color-primary-hover: #1e40af;
+  --color-primary-subtle: #eff6ff;
+  --color-primary-foreground: #ffffff;
+  --color-success-subtle: #dcfce7;
+  --color-success-foreground: #166534;
+  --color-warning: #b45309;
+  --color-warning-subtle: #fef3c7;
+  --color-warning-foreground: #78350f;
+  --color-danger: #b91c1c;
+  --color-danger-subtle: #fee2e2;
+  --color-danger-foreground: #991b1b;
+  --color-info: #1d4ed8;
+  --color-info-subtle: #dbeafe;
+  --color-info-foreground: #1e40af;
+  /* Compatibility aliases for existing CSS-variable consumers. */
+  --color-bg-body: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text-heading: #0f172a;
+  --color-text-secondary: #475569;
+  --color-primary: #1d4ed8;
+  --color-primary-active: #172554;
+  --color-primary-muted: #eff6ff;
+  --color-icon: #475569;
+  --color-icon-muted: #64748b;
+  --color-notification-dot: #fb2c36;
+  /* Card & button — from Figma Manajemen OPD design */
+  --color-btn-primary-bg: #030213;
+  --color-search-input-bg: #f3f3f5;
+  --color-placeholder: #64748b;
+  --color-card-icon-blue: #155dfc;
+  --color-card-icon-green: #00a63e;
+  --color-card-icon-orange: #f54900;
+  --color-card-icon-purple: #9810fa;
+  --color-success: #15803d;
+  /* Table — from design */
+  --color-table-header-bg: #f9fafb;
+  --color-table-header-text: #364153;
+  --color-row-icon-bg: #dbeafe;
+  --color-pill-green-bg: #dcfce7;
+  --color-pill-green-text: #008236;
+  --color-pill-gray-bg: #f3f4f6;
+  --color-pill-gray-text: #364153;
+  --color-status-active: #00a63e;
+  --color-toggle-active-bg: #030213;
+  --color-toggle-inactive-bg: #cbced4;
+  --color-status-inactive: #99a1af;
+  --color-row-border: #f3f4f6;
+  /* Typography and compatibility neutrals. */
+  /* Legacy gray utilities now resolve to a single Slate neutral family. */
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #f1f5f9;
+  --color-gray-200: #e2e8f0;
+  --color-gray-300: #cbd5e1;
+  /* Raised for readable legacy informational text on white surfaces. */
+  --color-gray-400: #64748b;
+  --color-gray-500: #64748b;
+  --color-gray-600: #475569;
+  --color-gray-700: #334155;
+  --color-gray-800: #1e293b;
+  --color-gray-900: #0f172a;
+  --color-gray-950: #020617;
+  --font-heading: 16px;
+  --font-heading-line: 24px;
+  --font-body: 14px;
+  --font-body-line: 20px;
+  --font-weight-bold: 700;
+  --font-weight-semibold: 600;
+  --font-weight-medium: 500;
+  --font-weight-regular: 400;
+  /* Product UI type ramp — aligned with Fluent 2 and Carbon productive UI. */
+  --text-ui-title: 1.125rem;
+  --text-ui-title--line-height: 1.5rem;
+  --text-ui-section: 1rem;
+  --text-ui-section--line-height: 1.375rem;
+  --text-ui-body: 0.875rem;
+  --text-ui-body--line-height: 1.25rem;
+  --text-ui-table: 0.8125rem;
+  --text-ui-table--line-height: 1.125rem;
+  --text-ui-label: 0.75rem;
+  --text-ui-label--line-height: 1rem;
+}
+
+html {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+body {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: var(--color-text-heading);
+  background: var(--color-bg-body);
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--font-body-line);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  color: var(--color-foreground);
+  background: var(--color-primary-subtle);
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  scroll-margin-block: 1rem;
+}
+
+/* Tombol solid selalu memakai foreground putih; varian tint/outline tetap semantik. */
+[data-button-appearance="solid"] {
+  color: #ffffff;
+}
+
+[data-button-appearance="solid"] :where(svg, span) {
+  color: inherit;
+}
+
+.manajemen-opd-search::placeholder {
+  color: var(--color-placeholder);
+}
+
+/* ── SOP: preview A4 landscape (297×210mm); lebar diagram tetap, scroll horizontal jika viewport sempit ──────── */
+.sop-a4-preview {
+  width: 100%;
+  max-width: 297mm;
+  min-width: 0;
+  min-height: 210mm;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+.sop-a4-preview::-webkit-scrollbar {
+  height: 8px;
+}
+.sop-a4-preview::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #94a3b8;
+}
+
+@media print {
+  .sop-a4-preview,
+  .sop-print-document {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: auto;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
+/* Diagram non-aktif: off-screen tapi tetap terukur (jangan pakai visibility:hidden — SVG tidak ikut cetak) */
+@media screen {
+  .sop-diagram-screen-off {
+    position: fixed;
+    left: -12000px;
+    top: 0;
+    width: 297mm;
+    max-width: 297mm;
+    opacity: 0.01;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+/* Saat menyiapkan cetak: bawa kedua diagram ke layout normal agar path ter-render */
+body.sop-print-preparing .sop-diagram-screen-off {
+  position: static !important;
+  left: auto !important;
+  opacity: 1 !important;
+  width: auto !important;
+  max-width: none !important;
+  pointer-events: none !important;
+  z-index: auto !important;
+}
+
+[data-sop-diagram-export-container] .bpmn-scaled-viewport {
+  overflow: visible !important;
+}
+
+/* ── Scrollbar disembunyikan agar area scroll terlihat rapi (scroll tetap berfungsi) ──────── */
+.scrollbar-hide {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-hide::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #cbd5e1;
+}
+
+/* Hindari teks mikro yang sulit dibaca; utilitas lama tetap kompatibel. */
+[class~="text-[8px]"],
+[class~="text-[9px]"],
+[class~="text-[10px]"],
+[class~="text-[11px]"] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

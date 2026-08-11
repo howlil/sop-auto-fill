@@ -1,0 +1,17 @@
+node_modules
+package-lock.json
+.DS_Store
+dist
+dist-ssr
+*.local
+count.txt
+.env
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+todos.json
+/*.md
+playwright-report
+test-results

@@ -1,0 +1,25 @@
+-- Rename JenisPengajuanEvaluasi enum values:
+-- TERJADWAL -> EVALUASI_REQUEST_EVALUATOR
+-- MANDIRI   -> EVALUASI_REQUEST_OPD
+
+ALTER TABLE `PengajuanEvaluasi`
+  MODIFY `jenis` ENUM(
+    'TERJADWAL',
+    'MANDIRI',
+    'EVALUASI_REQUEST_EVALUATOR',
+    'EVALUASI_REQUEST_OPD'
+  ) NOT NULL;
+
+UPDATE `PengajuanEvaluasi`
+SET `jenis` = 'EVALUASI_REQUEST_EVALUATOR'
+WHERE `jenis` = 'TERJADWAL';
+
+UPDATE `PengajuanEvaluasi`
+SET `jenis` = 'EVALUASI_REQUEST_OPD'
+WHERE `jenis` = 'MANDIRI';
+
+ALTER TABLE `PengajuanEvaluasi`
+  MODIFY `jenis` ENUM(
+    'EVALUASI_REQUEST_EVALUATOR',
+    'EVALUASI_REQUEST_OPD'
+  ) NOT NULL;

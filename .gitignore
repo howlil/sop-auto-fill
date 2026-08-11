@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build outputs
+dist/
+dist-ssr/
+build/
+coverage/
+**/coverage/
+playwright-report/
+**/playwright-report/
+test-results/
+**/test-results/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# environment files
+.env
+.env.*
+*.local
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# caches and generated runtime files
+.nyc_output/
+.temp/
+.tmp/
+.nitro/
+.tanstack/
+.wrangler/
+.output/
+.vinxi/
+
+# repo-specific scratch and generated data
+count.txt
+todos.json

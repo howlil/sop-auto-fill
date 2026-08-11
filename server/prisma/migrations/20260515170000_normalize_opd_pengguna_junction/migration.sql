@@ -1,0 +1,2 @@
+-- No-op migration.
+-- Folder ini dipertahankan agar urutan migrasi Prisma tetap valid.

@@ -1,0 +1,12 @@
+-- Rename HasilEvaluasi: TIDAK_SESUAI -> PERLU_PERBAIKAN (MySQL ENUM)
+
+ALTER TABLE `NilaiEvaluasi` MODIFY `hasil` ENUM('SESUAI', 'TIDAK_SESUAI', 'PERLU_PERBAIKAN') NULL;
+UPDATE `NilaiEvaluasi` SET `hasil` = 'PERLU_PERBAIKAN' WHERE `hasil` = 'TIDAK_SESUAI';
+ALTER TABLE `NilaiEvaluasi` MODIFY `hasil` ENUM('SESUAI', 'PERLU_PERBAIKAN') NULL;
+
+ALTER TABLE `LogNilaiEvaluasi` MODIFY `hasilSebelum` ENUM('SESUAI', 'TIDAK_SESUAI', 'PERLU_PERBAIKAN') NULL;
+ALTER TABLE `LogNilaiEvaluasi` MODIFY `hasilSesudah` ENUM('SESUAI', 'TIDAK_SESUAI', 'PERLU_PERBAIKAN') NULL;
+UPDATE `LogNilaiEvaluasi` SET `hasilSebelum` = 'PERLU_PERBAIKAN' WHERE `hasilSebelum` = 'TIDAK_SESUAI';
+UPDATE `LogNilaiEvaluasi` SET `hasilSesudah` = 'PERLU_PERBAIKAN' WHERE `hasilSesudah` = 'TIDAK_SESUAI';
+ALTER TABLE `LogNilaiEvaluasi` MODIFY `hasilSebelum` ENUM('SESUAI', 'PERLU_PERBAIKAN') NULL;
+ALTER TABLE `LogNilaiEvaluasi` MODIFY `hasilSesudah` ENUM('SESUAI', 'PERLU_PERBAIKAN') NULL;

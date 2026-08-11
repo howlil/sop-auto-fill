@@ -1,0 +1,4 @@
+-- Tidak ada perubahan skema: constraint `RiwayatOpdPengguna_penggunaId_fkey` sudah dibuat di
+-- `20260430034406_init`. Menambahkan lagi di sini menyebabkan error 1826 (nama constraint duplikat)
+-- saat `migrate reset` / shadow database.
+-- FK ke `Pengguna` dikembalikan setelah restrukturisasi tabel di `20260502000000_add_invariant_organisasi`.

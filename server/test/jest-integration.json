@@ -1,0 +1,25 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testRegex": "test/integration/.*\\.integration-spec\\.ts$",
+  "transform": {
+    "^.+\\.ts$": [
+      "ts-jest",
+      {
+        "tsconfig": {
+          "noUnusedLocals": false,
+          "noUnusedParameters": false
+        }
+      }
+    ]
+  },
+  "testEnvironment": "node",
+  "modulePathIgnorePatterns": [
+    "<rootDir>/dist",
+    "<rootDir>/coverage",
+    "<rootDir>/src/generated/prisma/package.json"
+  ],
+  "setupFiles": ["<rootDir>/test/integration/setup-env.ts"],
+  "verbose": true,
+  "testTimeout": 120000
+}
