@@ -9,6 +9,7 @@ async function waitForAppHydration(page: Page): Promise<void> {
 
 test('MVP workspace SOP survives reload and versions a completed SOP', async ({ page }) => {
   const workspaceName = 'E2E MVP Workspace'
+  const actorName = 'E2E Admin'
   const initialTitle = 'SOP MVP E2E'
   const updatedTitle = 'SOP MVP E2E Autosaved'
 
@@ -23,6 +24,10 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
+  await page.getByPlaceholder('Nama pelaksana').fill(actorName)
+  await page.getByRole('button', { name: 'Tambah Pelaksana' }).click()
+  await expect(page.getByLabel('Daftar pelaksana workspace').getByText(actorName, { exact: true })).toBeVisible()
+
   await page.getByPlaceholder('Judul SOP').fill(initialTitle)
   await page.getByPlaceholder('Nomor SOP').fill('E2E-001')
   await page.getByRole('button', { name: 'Buat SOP' }).click()
@@ -31,6 +36,22 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await expect(page.getByText('Dokumen SOP', { exact: true })).toBeVisible()
   const titleInput = page.getByPlaceholder('Judul SOP')
   await titleInput.fill(updatedTitle)
+
+  await page.getByRole('button', { name: 'Tambah aktor pelaksana' }).click()
+  await page.getByRole('checkbox', { name: actorName }).check()
+  await page.getByRole('button', { name: 'Tambahkan' }).click()
+  await expect(page.getByText(actorName, { exact: true })).toBeVisible()
+
+  const addStep = page.getByRole('button', { name: 'Tambah langkah' })
+  await addStep.click()
+  await addStep.click()
+  await addStep.click()
+  const activities = page.getByLabel('Kegiatan')
+  await expect(activities).toHaveCount(3)
+  await activities.nth(0).fill('Mulai proses')
+  await activities.nth(1).fill('Verifikasi dokumen')
+  await activities.nth(2).fill('Selesai proses')
+
   await expect(page.getByRole('status').filter({ hasText: 'Tersimpan' })).toBeVisible({
     timeout: 20_000,
   })
@@ -38,6 +59,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.reload()
   await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
 
   await expect(page.getByRole('tab', { name: 'Flowchart' })).toBeVisible()
   await page.getByRole('tab', { name: 'BPMN' }).click()
@@ -65,6 +87,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(completedUrl)
   await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
   await expect(page.getByText('v2', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Selesai' })).toBeVisible()
 })

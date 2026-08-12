@@ -6,7 +6,7 @@ import { SearchableSelectDialog } from '@/components/ui/searchable-select-dialog
 export interface PelaksanaDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Daftar pelaksana dari master (Manajemen Pelaksana SOP) */
+  /** Daftar pelaksana dari workspace. */
   options: {
     id: string
     name: string
@@ -27,7 +27,7 @@ export function PelaksanaDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Pilih Aktor Pelaksana"
-      description="Cari pelaksana yang akan ditambahkan (nama atau kode). Data dari Manajemen Pelaksana SOP."
+      description="Pilih pelaksana yang sudah dibuat pada workspace ini."
       searchPlaceholder="Cari pelaksana (nama)..."
       items={options}
       existingIds={existingImplementers.map((item) => item.id)}
@@ -38,7 +38,7 @@ export function PelaksanaDialog({
           <p className="text-xs font-medium text-foreground leading-snug">{item.name}</p>
         </div>
       )}
-      emptyMessage="Belum ada data pelaksana. Kelola di menu Manajemen Pelaksana SOP."
+      emptyMessage="Belum ada pelaksana di workspace ini."
       emptySearchMessage="Tidak ada pelaksana yang cocok dengan pencarian."
       onConfirm={(selectedIds) => {
         const existingIdSet = new Set(existingImplementers.map((item) => item.id))
