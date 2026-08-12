@@ -165,14 +165,23 @@ export interface PenyusunWorkbenchDiagramItem {
   pathOverrides?: Record<string, unknown> | null
 }
 
+export type PenyusunWorkbenchDiagramKonfigurasi =
+  | PenyusunWorkbenchDiagramItem[]
+  | Partial<Record<JenisDiagram, PenyusunWorkbenchDiagramItem>>
+
 export interface PenyusunWorkbenchResponse {
   detail: PenyusunWorkbenchDetail
   langkah: PenyusunWorkbenchLangkah[]
   logEdit: PenyusunWorkbenchLogEdit[]
-  diagramKonfigurasi?: PenyusunWorkbenchDiagramItem[] | Partial<Record<JenisDiagram, PenyusunWorkbenchDiagramItem>>
+  diagramKonfigurasi?: PenyusunWorkbenchDiagramKonfigurasi
 }
 
+export type SopDetail = PenyusunWorkbenchDetail
+export type LangkahSOP = PenyusunWorkbenchLangkah
+export type PenyusunWorkbenchData = PenyusunWorkbenchResponse
+
 export interface UpdateDetailSopStatusDto { status: StatusSOP }
+export type UpdateStatusDto = UpdateDetailSopStatusDto
 
 export interface UpdateSopHeaderDto {
   judul?: string
@@ -188,21 +197,24 @@ export interface UpdateSopHeaderDto {
   }
 }
 
+export interface PelaksanaPatchItem { pelaksanaId: string }
+export interface LangkahPatchItem {
+  tempId: string
+  jenis: JenisLangkahProsedur
+  kegiatan: string
+  kelengkapan?: string
+  keluaran?: string
+  waktu?: number
+  satuanWaktu?: SatuanWaktu
+  keterangan?: string
+  pelaksanaId?: string | null
+  langkahSelanjutnyaYaTempId?: string | null
+  langkahSelanjutnyaTidakTempId?: string | null
+}
+
 export interface UpdateSopProsedurDto {
-  pelaksana?: Array<{ pelaksanaId: string }>
-  langkah?: Array<{
-    tempId: string
-    jenis: JenisLangkahProsedur
-    kegiatan: string
-    kelengkapan?: string
-    keluaran?: string
-    waktu?: number
-    satuanWaktu?: SatuanWaktu
-    keterangan?: string
-    pelaksanaId?: string | null
-    langkahSelanjutnyaYaTempId?: string | null
-    langkahSelanjutnyaTidakTempId?: string | null
-  }>
+  pelaksana?: PelaksanaPatchItem[]
+  langkah?: LangkahPatchItem[]
 }
 
 export interface UpdateSopDiagramDto {
@@ -223,3 +235,5 @@ export interface SopRiwayatVersiRow {
   canHapusDraft: boolean
   canBuatVersiBaru: boolean
 }
+
+export const DEFAULT_SOP_STATUS: StatusSOP = 'DRAFT'
