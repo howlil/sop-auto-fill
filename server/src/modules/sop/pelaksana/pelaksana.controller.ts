@@ -11,19 +11,11 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-import {
-  ApiCookieAuth,
-  ApiForbiddenResponse,
-  ApiOperation,
-  ApiParam,
-  ApiQuery,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiCookieAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { type ApiSuccessResponse, Roles, UseJwtAndRolesGuards } from '../../../common';
-import { PeranPengguna } from '../../../generated/prisma';
+import { JwtAuthGuard, type ApiSuccessResponse } from '../../../common';
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   type JwtAccessPayload,
@@ -35,48 +27,42 @@ import { PelaksanaService } from './pelaksana.service';
 
 @ApiTags('Pelaksana')
 @Controller('pelaksana')
-@UseJwtAndRolesGuards()
-@Roles(PeranPengguna.PENYUSUN, PeranPengguna.PJ_PENYUSUN)
+@UseGuards(JwtAuthGuard)
+@ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
 export class PelaksanaController {
   constructor(private readonly pelaksanaService: PelaksanaService) {}
 
   @Get()
-  @ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
-  @ApiOperation({ summary: 'Daftar pelaksana per OPD' })
-  @ApiQuery({ name: 'opdId', required: false, format: 'uuid' })
+  @ApiOperation({ summary: 'Daftar pelaksana dalam workspace' })
+  @ApiQuery({ name: 'workspaceId', required: true, format: 'uuid' })
   @ApiResponse({ status: 200, type: [PelaksanaResponseDto] })
-  @ApiForbiddenResponse()
   async list(
     @Req() req: Request & { user: JwtAccessPayload },
-    @Query('opdId') opdId?: string,
+    @Query('workspaceId', ParseUUIDPipe) workspaceId: string,
   ): Promise<ApiSuccessResponse<PelaksanaResponseDto[]>> {
-    const data = await this.pelaksanaService.list(req.user, opdId);
     return {
       message: 'Daftar pelaksana berhasil diambil',
       success: true,
-      data,
+      data: await this.pelaksanaService.list(req.user, workspaceId),
     };
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
-  @ApiOperation({ summary: 'Tambah pelaksana untuk OPD pengguna' })
+  @ApiOperation({ summary: 'Tambah pelaksana dalam workspace' })
   @ApiResponse({ status: 201, type: PelaksanaResponseDto })
   async create(
     @Req() req: Request & { user: JwtAccessPayload },
     @Body() dto: CreatePelaksanaDto,
   ): Promise<ApiSuccessResponse<PelaksanaResponseDto>> {
-    const data = await this.pelaksanaService.create(req.user, dto);
     return {
       message: 'Pelaksana berhasil ditambahkan',
       success: true,
-      data,
+      data: await this.pelaksanaService.create(req.user, dto),
     };
   }
 
   @Patch(':id')
-  @ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
   @ApiOperation({ summary: 'Perbarui nama pelaksana' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({ status: 200, type: PelaksanaResponseDto })
@@ -85,17 +71,15 @@ export class PelaksanaController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePelaksanaDto,
   ): Promise<ApiSuccessResponse<PelaksanaResponseDto>> {
-    const data = await this.pelaksanaService.update(req.user, id, dto);
     return {
       message: 'Pelaksana berhasil diperbarui',
       success: true,
-      data,
+      data: await this.pelaksanaService.update(req.user, id, dto),
     };
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
   @ApiOperation({ summary: 'Hapus pelaksana jika tidak direferensikan' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async remove(
