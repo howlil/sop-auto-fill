@@ -7,10 +7,7 @@ export const E2E_IDENTITY = Object.freeze({
   name: 'E2E User',
 });
 
-type E2eEnvironment = {
-  readonly NODE_ENV?: string;
-  readonly E2E_TEST?: string;
-};
+type E2eEnvironment = Readonly<Record<string, string | undefined>>;
 
 type E2eUser = {
   readonly userId: string;
