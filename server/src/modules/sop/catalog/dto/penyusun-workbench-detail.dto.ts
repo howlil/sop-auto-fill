@@ -1,13 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { KepalaOpdRingkasDto } from './kepala-opd-ringkas.dto';
 
-/** Header SOP ringkas di dalam detail area kerja. */
 export class PenyusunWorkbenchSopHeaderDto {
   @ApiProperty()
   readonly id!: string;
 
-  @ApiProperty()
-  readonly opdId!: string;
+  @ApiProperty({ format: 'uuid' })
+  readonly workspaceId!: string;
 
   @ApiProperty()
   readonly judul!: string;
@@ -19,9 +17,8 @@ export class PenyusunWorkbenchSopHeaderDto {
   readonly updatedAt!: string;
 }
 
-/** DetailSOP + relasi yang dipakai editor penyusun (selaras klien SopDetail). */
 export class PenyusunWorkbenchDetailDto {
-  @ApiProperty({ description: 'ID DetailSOP (sama dengan id)' })
+  @ApiProperty()
   readonly id!: string;
 
   @ApiProperty()
@@ -36,17 +33,10 @@ export class PenyusunWorkbenchDetailDto {
   @ApiProperty()
   readonly versi!: number;
 
-  @ApiPropertyOptional({
-    format: 'uuid',
-    nullable: true,
-    description: 'DetailSOP terminal yang menjadi sumber saat versi ini dibuat',
-  })
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
   readonly revisiDariDetailSopId?: string | null;
 
-  @ApiPropertyOptional({
-    nullable: true,
-    description: 'Nomor versi sumber revisi',
-  })
+  @ApiPropertyOptional({ nullable: true })
   readonly revisiDariVersi?: number | null;
 
   @ApiProperty()
@@ -61,7 +51,7 @@ export class PenyusunWorkbenchDetailDto {
   @ApiPropertyOptional({ nullable: true })
   readonly tanggalEfektif?: string | null;
 
-  @ApiProperty({ description: 'URL/logo instansi (nilai pengganti bila belum diisi)' })
+  @ApiProperty()
   readonly logoInstansi!: string;
 
   @ApiProperty()
@@ -88,11 +78,7 @@ export class PenyusunWorkbenchDetailDto {
   @ApiPropertyOptional()
   readonly terakhirDieditOleh?: { id: string; nama: string };
 
-  @ApiPropertyOptional({
-    type: 'object',
-    additionalProperties: false,
-    description: 'Lampiran non-prosedural pada dokumen SOP (struktur eksplisit per kategori).',
-  })
+  @ApiPropertyOptional({ type: 'object', additionalProperties: false })
   readonly lampiran?: {
     peringatan: Array<{ id: string; teks: string; createdAt: string }>;
     kualifikasiPelaksanaan: Array<{ id: string; teks: string; createdAt: string }>;
@@ -112,28 +98,9 @@ export class PenyusunWorkbenchDetailDto {
   @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
   readonly swimlanes?: unknown[];
 
-  @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
-  readonly nilaiEvaluasi?: unknown[];
-
-  @ApiPropertyOptional({
-    type: () => KepalaOpdRingkasDto,
-    nullable: true,
-    description: 'Kepala OPD OPD pemilik SOP (untuk blok DISAHKAN OLEH / NIP di pratinjau dokumen)',
-  })
-  readonly kepalaOpd?: KepalaOpdRingkasDto | null;
-
-  @ApiPropertyOptional({
-    type: [String],
-    description: 'ID peraturan dasar hukum (urut createdAt asc) untuk panel kanan editor',
-  })
+  @ApiPropertyOptional({ type: [String] })
   readonly dasarHukumPeraturanIds?: string[];
 
-  @ApiPropertyOptional({
-    type: [String],
-    description: 'ID DetailSOP terkait (relasi keluar, urut createdAt asc)',
-  })
+  @ApiPropertyOptional({ type: [String] })
   readonly sopTerkaitDetailIds?: string[];
-
-  // Catatan: field kompatibilitas lama `peringatan/kualifikasiPelaksanaan/peralatanPerlengkapan/pencatatanPendataan`
-  // diganti menjadi `lampiran` struktur baru.
 }
