@@ -83,6 +83,18 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   }
 
   const origin = new URL(baseURL)
+  const persistedAuth = JSON.stringify({
+    state: {
+      user: {
+        id: session.user.userId,
+        email: session.user.email,
+        name: session.user.name,
+        avatarUrl: null,
+      },
+    },
+    version: 0,
+  })
+
   mkdirSync(dirname(authStatePath), { recursive: true })
   writeFileSync(
     authStatePath,
@@ -100,7 +112,12 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
             sameSite: 'Lax',
           },
         ],
-        origins: [],
+        origins: [
+          {
+            origin: origin.origin,
+            localStorage: [{ name: 'auth-storage', value: persistedAuth }],
+          },
+        ],
       },
       null,
       2,
