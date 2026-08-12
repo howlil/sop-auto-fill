@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, RefreshCcw } from 'lucide-react'
-import { DetailSopPenyusunHeader } from './components/DetailSopPenyusunHeader'
-import { DetailSopPenyusunMain } from './components/DetailSopPenyusunMain'
-import { DetailSopPenyusunSidePanel } from './components/DetailSopPenyusunSidePanel'
+import { DetailSOPPenyusunHeader } from './components/DetailSopPenyusunHeader'
+import { DetailSOPPenyusunMain } from './components/DetailSopPenyusunMain'
+import { DetailSOPPenyusunSidePanel } from './components/DetailSopPenyusunSidePanel'
 import { Button } from '@/components/ui/button'
-import { showErrorMessages, useToast } from '@/hooks/useToast'
+import { showErrorMessages } from '@/hooks/useToast'
 import { useDetailSopPenyusun } from '@/api/sop'
-import { useWorkspaceDraft } from '@/stores/workspaceDraftStore'
 import { SopEditorProvider, type SopEditorContextValue } from './SopEditorContext'
 import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-header-autosave'
 
@@ -30,10 +29,8 @@ export function DetailSOPPenyusun() {
   const params = useParams({ strict: false }) as { workspaceId?: string; sopId?: string; id?: string }
   const routeWorkspaceId = params.workspaceId
   const id = params.sopId ?? params.id ?? ''
-  const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<'flowchart' | 'bpmn'>('flowchart')
   const [isEditingSteps, setIsEditingSteps] = useState(false)
-  const { steps: workspaceSteps, setSteps: setWorkspaceSteps } = useWorkspaceDraft()
 
   const editor = useDetailSopPenyusun(id)
   const {
@@ -76,13 +73,7 @@ export function DetailSOPPenyusun() {
     if (combinedAutosaveError) {
       showErrorMessages(combinedAutosaveError, 'Gagal menyimpan perubahan otomatis')
     }
-  }, [combinedAutosaveError, showToast])
-
-  useEffect(() => {
-    if (prosedurRows.length > 0 && workspaceSteps.length === 0) {
-      setWorkspaceSteps(prosedurRows)
-    }
-  }, [prosedurRows, workspaceSteps.length, setWorkspaceSteps])
+  }, [combinedAutosaveError])
 
   const contextValue = useMemo<SopEditorContextValue>(
     () => ({
@@ -162,7 +153,7 @@ export function DetailSOPPenyusun() {
               <ArrowLeft className="h-4 w-4" />
             </a>
             <div className="min-w-0 flex-1">
-              <DetailSopPenyusunHeader
+              <DetailSOPPenyusunHeader
                 metadata={metadata}
                 currentSopStatus={currentSopStatus}
                 currentSopStatusLabel={currentSopStatusLabel}
@@ -179,14 +170,14 @@ export function DetailSOPPenyusun() {
         </header>
 
         <div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 gap-0 overflow-hidden">
-          <DetailSopPenyusunMain
+          <DetailSOPPenyusunMain
             activeTab={activeTab}
             onActiveTabChange={setActiveTab}
             isEditingSteps={isEditingSteps}
             setIsEditingSteps={setIsEditingSteps}
           />
           {resolvedWorkspaceId && sopId ? (
-            <DetailSopPenyusunSidePanel
+            <DetailSOPPenyusunSidePanel
               workspaceId={resolvedWorkspaceId}
               detailSopId={sopDetailId}
               sopId={sopId}
