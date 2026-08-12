@@ -27,18 +27,17 @@ export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtAccessPayload): Promise<JwtAccessPayload> {
-    if (typeof payload.sesiTokenVersion !== 'number') {
+    if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
       throw new UnauthorizedException('Sesi tidak valid');
     }
-    const row = await this.authRepository.findActivePenggunaById(payload.sub);
-    if (row === null || row.sesiTokenVersion !== payload.sesiTokenVersion) {
+    const user = await this.authRepository.findById(payload.sub);
+    if (user === null) {
       throw new UnauthorizedException('Sesi tidak valid');
     }
     return {
-      sub: row.penggunaId,
-      email: row.email,
-      peran: row.peran,
-      sesiTokenVersion: row.sesiTokenVersion,
+      sub: user.userId,
+      email: user.email,
+      name: user.name,
     };
   }
 }
