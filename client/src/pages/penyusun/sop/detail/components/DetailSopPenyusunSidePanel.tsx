@@ -42,7 +42,12 @@ export function DetailSOPPenyusunSidePanel({
   ]
 
   return (
-    <CollapsibleSidePanel side="right" collapsed={collapsed} widthCollapsed="w-10" widthExpanded="w-full">
+    <CollapsibleSidePanel
+      side="right"
+      collapsed={collapsed}
+      widthCollapsed="w-10"
+      widthExpanded="w-[min(24rem,100%)]"
+    >
       {collapsed ? (
         <CollapsedStripButton
           label={tabs[0].label}
