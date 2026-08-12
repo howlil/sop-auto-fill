@@ -1,4 +1,11 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
+
+async function waitForAppHydration(page: Page): Promise<void> {
+  await page.locator('html[data-app-hydrated="true"]').waitFor({
+    state: 'attached',
+    timeout: 20_000,
+  })
+}
 
 test('MVP workspace SOP survives reload and versions a completed SOP', async ({ page }) => {
   const workspaceName = 'E2E MVP Workspace'
@@ -6,6 +13,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   const updatedTitle = 'SOP MVP E2E Autosaved'
 
   await page.goto('/workspaces')
+  await waitForAppHydration(page)
   await expect(page.getByText('E2E User', { exact: true })).toBeVisible()
 
   await page
@@ -13,10 +21,12 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
     .fill(workspaceName)
   await page.getByRole('button', { name: 'Buat Workspace' }).click()
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
+  await waitForAppHydration(page)
 
   await page.getByPlaceholder('Judul SOP').fill(initialTitle)
   await page.getByPlaceholder('Nomor SOP').fill('E2E-001')
   await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await waitForAppHydration(page)
 
   await expect(page.getByText('Dokumen SOP', { exact: true })).toBeVisible()
   const titleInput = page.getByPlaceholder('Judul SOP')
@@ -26,6 +36,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   })
 
   await page.reload()
+  await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
 
   await expect(page.getByRole('tab', { name: 'Flowchart' })).toBeVisible()
@@ -52,6 +63,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   const completedUrl = page.url()
   await page.getByRole('button', { name: 'Buat versi baru' }).click()
   await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(completedUrl)
+  await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
   await expect(page.getByText('v2', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Selesai' })).toBeVisible()
