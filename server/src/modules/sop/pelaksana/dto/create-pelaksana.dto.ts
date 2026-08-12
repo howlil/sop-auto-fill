@@ -1,11 +1,10 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class CreatePelaksanaDto {
-  @ApiPropertyOptional({ description: 'OPD target; jika diisi harus sama dengan OPD pengguna' })
-  @IsOptional()
+  @ApiProperty({ description: 'Workspace tempat master pelaksana disimpan', format: 'uuid' })
   @IsUUID()
-  readonly opdId?: string;
+  readonly workspaceId!: string;
 
   @ApiProperty({ description: 'Nama pelaksana / aktor SOP' })
   @IsString()
