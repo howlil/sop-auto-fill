@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from '@tanstack/react-router'
+import { useParams } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, RefreshCcw } from 'lucide-react'
 import { DetailSopPenyusunHeader } from './components/DetailSopPenyusunHeader'
 import { DetailSopPenyusunMain } from './components/DetailSopPenyusunMain'
@@ -28,7 +28,7 @@ function combineAutosaveStatus(
 
 export function DetailSOPPenyusun() {
   const params = useParams({ strict: false }) as { workspaceId?: string; sopId?: string; id?: string }
-  const workspaceId = params.workspaceId
+  const routeWorkspaceId = params.workspaceId
   const id = params.sopId ?? params.id ?? ''
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<'flowchart' | 'bpmn'>('flowchart')
@@ -38,6 +38,9 @@ export function DetailSOPPenyusun() {
   const editor = useDetailSopPenyusun(id)
   const {
     sopDetailId,
+    workspaceId,
+    sopId,
+    auditLogs,
     isLoading,
     loadError,
     currentSopStatus,
@@ -147,16 +150,17 @@ export function DetailSOPPenyusun() {
     )
   }
 
-  const backHref = workspaceId ? `/workspaces/${workspaceId}` : '/workspaces'
+  const resolvedWorkspaceId = workspaceId ?? routeWorkspaceId ?? ''
+  const backHref = resolvedWorkspaceId ? `/workspaces/${resolvedWorkspaceId}` : '/workspaces'
 
   return (
     <SopEditorProvider value={contextValue}>
       <main className="flex min-h-screen flex-col bg-surface-subtle">
         <header className="shrink-0 border-b border-border bg-background px-4 py-3">
           <div className="mx-auto flex max-w-[1800px] items-start gap-3">
-            <Link to={backHref} className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted">
+            <a href={backHref} className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted">
               <ArrowLeft className="h-4 w-4" />
-            </Link>
+            </a>
             <div className="min-w-0 flex-1">
               <DetailSopPenyusunHeader
                 metadata={metadata}
@@ -181,7 +185,17 @@ export function DetailSOPPenyusun() {
             isEditingSteps={isEditingSteps}
             setIsEditingSteps={setIsEditingSteps}
           />
-          <DetailSopPenyusunSidePanel />
+          {resolvedWorkspaceId && sopId ? (
+            <DetailSopPenyusunSidePanel
+              workspaceId={resolvedWorkspaceId}
+              detailSopId={sopDetailId}
+              sopId={sopId}
+              auditEntries={auditLogs}
+              isReadOnly={isReadOnly}
+              onBuatVersiBaru={() => void handleBuatVersiBaru()}
+              isBuatVersiBaruPending={isBuatVersiBaruPending}
+            />
+          ) : null}
         </div>
       </main>
     </SopEditorProvider>
