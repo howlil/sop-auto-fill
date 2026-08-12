@@ -38,7 +38,9 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await titleInput.fill(updatedTitle)
 
   await page.getByRole('button', { name: 'Tambah aktor pelaksana' }).click()
-  await page.getByRole('checkbox', { name: actorName }).check()
+  const actorCheckbox = page.getByRole('checkbox', { name: actorName })
+  await page.getByText(actorName, { exact: true }).click()
+  await expect(actorCheckbox).toBeChecked()
   await page.getByRole('button', { name: 'Tambahkan' }).click()
   await expect(page.getByText(actorName, { exact: true })).toBeVisible()
 
