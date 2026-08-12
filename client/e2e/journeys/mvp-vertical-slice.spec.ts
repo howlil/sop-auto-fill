@@ -7,6 +7,10 @@ async function waitForAppHydration(page: Page): Promise<void> {
   })
 }
 
+function visibleProcedureField(page: Page, label: string) {
+  return page.locator(`[aria-label="${label}"]:visible`)
+}
+
 test('MVP workspace SOP survives reload and versions a completed SOP', async ({ page }) => {
   const workspaceName = 'E2E MVP Workspace'
   const actorName = 'E2E Admin'
@@ -50,11 +54,11 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await addStep.click()
   await addStep.click()
 
-  const activities = page.getByLabel('Kegiatan')
-  const completeness = page.getByLabel('Kelengkapan')
-  const timeAmounts = page.getByLabel('Jumlah waktu')
-  const outputs = page.getByLabel('Output')
-  const notes = page.getByLabel('Keterangan')
+  const activities = visibleProcedureField(page, 'Kegiatan')
+  const completeness = visibleProcedureField(page, 'Kelengkapan')
+  const timeAmounts = visibleProcedureField(page, 'Jumlah waktu')
+  const outputs = visibleProcedureField(page, 'Output')
+  const notes = visibleProcedureField(page, 'Keterangan')
   await expect(activities).toHaveCount(3)
 
   const activityValues = ['Mulai proses', 'Verifikasi dokumen', 'Selesai proses']
@@ -74,8 +78,8 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
   await page.getByRole('button', { name: 'Langkah' }).click()
-  await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
-  await expect(page.getByLabel('Kelengkapan').nth(1)).toHaveValue('Dokumen input')
+  await expect(visibleProcedureField(page, 'Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await expect(visibleProcedureField(page, 'Kelengkapan').nth(1)).toHaveValue('Dokumen input')
   await page.getByRole('button', { name: 'Selesai edit' }).click()
 
   await expect(page.getByRole('tab', { name: 'Flowchart' })).toBeVisible()
@@ -105,8 +109,8 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
   await page.getByRole('button', { name: 'Langkah' }).click()
-  await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
-  await expect(page.getByLabel('Kelengkapan').nth(1)).toHaveValue('Dokumen input')
+  await expect(visibleProcedureField(page, 'Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await expect(visibleProcedureField(page, 'Kelengkapan').nth(1)).toHaveValue('Dokumen input')
   await page.getByRole('button', { name: 'Selesai edit' }).click()
   await expect(page.getByText('v2', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Selesai' })).toBeVisible()
