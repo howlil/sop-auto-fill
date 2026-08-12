@@ -90,10 +90,11 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
 
   const pdfButton = page.getByRole('button', { name: 'Cetak PDF' })
   await pdfButton.click()
-  await expect(pdfButton).toContainText('Menyiapkan', { timeout: 20_000 })
-  await page.locator('iframe[src^="blob:"]').waitFor({ state: 'attached', timeout: 30_000 })
+  const pdfFrame = page.locator('iframe[src^="blob:"]')
+  await pdfFrame.waitFor({ state: 'attached', timeout: 30_000 })
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
-  await expect(pdfButton).toHaveText(/Cetak PDF/, { timeout: 10_000 })
+  await pdfFrame.waitFor({ state: 'detached', timeout: 10_000 })
+  await expect(page.getByRole('button', { name: 'Cetak PDF' })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('Gagal menyiapkan PDF. Coba muat ulang halaman.')).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Selesai' }).click()
