@@ -26,7 +26,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma generate
       - run: pnpm typecheck
-      - run: pnpm test --runInBand
+      - run: pnpm test --runInBand --reporters=github-actions --reporters=summary
       - run: pnpm build
 
   client:
