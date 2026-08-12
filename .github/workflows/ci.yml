@@ -55,3 +55,84 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: sop_e2e
+          MYSQL_USER: sop
+          MYSQL_PASSWORD: sop
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      NODE_ENV: test
+      E2E_TEST: "1"
+      PORT: "3001"
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "3306"
+      DATABASE_USER: sop
+      DATABASE_PASSWORD: sop
+      DATABASE_NAME: sop_e2e
+      DATABASE_URL: mysql://sop:sop@127.0.0.1:3306/sop_e2e
+      JWT_SECRET: e2e-secret-that-is-long-enough-for-tests-only
+      JWT_EXPIRATION: 15m
+      GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
+      ALLOWED_ORIGINS: http://localhost:5173
+      PUBLIC_APP_ORIGIN: http://localhost:5173
+      E2E_BASE_URL: http://localhost:5173
+      E2E_API_BASE_URL: http://localhost:3001/api/v1
+      E2E_API_HEALTH_URL: http://localhost:3001/api/health
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install server dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      - name: Install client dependencies
+        run: pnpm --dir client install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --dir server exec prisma generate
+      - name: Prepare disposable E2E database
+        run: pnpm --dir server exec prisma db push
+      - name: Build server
+        run: pnpm --dir server build
+      - name: Start server
+        shell: bash
+        run: |
+          pnpm --dir server start:prod > server/e2e-server.log 2>&1 &
+          echo $! > server/e2e-server.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3001/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat server/e2e-server.log
+          exit 1
+      - name: Install Playwright Chromium
+        run: pnpm --dir client exec playwright install --with-deps chromium
+      - name: Run MVP vertical slice
+        run: pnpm --dir client test:e2e
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mvp-e2e-failure
+          path: |
+            client/playwright-report
+            client/test-results
+            server/e2e-server.log
+          if-no-files-found: ignore
