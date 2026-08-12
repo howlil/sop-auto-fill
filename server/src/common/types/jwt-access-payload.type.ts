@@ -1,9 +1,6 @@
-import type { PeranPengguna } from '../../generated/prisma';
-
-/** Isi muatan data JWT akses (sesuai yang ditandatangani di layanan auth). */
+/** Minimal JWT payload for an authenticated Google-backed user. */
 export type JwtAccessPayload = {
   readonly sub: string;
   readonly email: string;
-  readonly peran: PeranPengguna;
-  readonly sesiTokenVersion?: number;
+  readonly name: string;
 };
