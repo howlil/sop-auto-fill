@@ -47,7 +47,7 @@ export class PelaksanaService {
     id: string,
     dto: UpdatePelaksanaDto,
   ): Promise<PelaksanaResponseDto> {
-    const existing = await this.findOwned(user, id);
+    const existing = await this.findOwned(user.sub, id);
     try {
       return this.mapRow(
         await this.pelaksanaRepository.updateNama(existing.pelaksanaId, dto.namaPelaksana.trim()),
@@ -59,7 +59,7 @@ export class PelaksanaService {
   }
 
   async remove(user: JwtAccessPayload, id: string): Promise<void> {
-    await this.findOwned(user, id);
+    await this.findOwned(user.sub, id);
     const langkah = await this.pelaksanaRepository.countLangkahReferences(id);
     const swim = await this.pelaksanaRepository.countSwimlaneReferences(id);
     if (langkah > 0 || swim > 0) {
@@ -70,13 +70,12 @@ export class PelaksanaService {
     await this.pelaksanaRepository.delete(id);
   }
 
-  private async findOwned(user: JwtAccessPayload, id: string): Promise<PelaksanaRow> {
-    const workspaceCandidates = await this.workspaceService.list(user.sub);
-    for (const workspace of workspaceCandidates) {
-      const row = await this.pelaksanaRepository.findByIdAndWorkspace(id, workspace.workspaceId);
-      if (row !== null) return row;
+  private async findOwned(ownerId: string, id: string): Promise<PelaksanaRow> {
+    const row = await this.pelaksanaRepository.findOwnedByUser(id, ownerId);
+    if (row === null) {
+      throw new NotFoundException('Pelaksana tidak ditemukan');
     }
-    throw new NotFoundException('Pelaksana tidak ditemukan');
+    return row;
   }
 
   private rethrowUniqueNameConflict(err: unknown): void {
