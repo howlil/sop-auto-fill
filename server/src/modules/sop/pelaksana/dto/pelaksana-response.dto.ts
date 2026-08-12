@@ -4,8 +4,8 @@ export class PelaksanaResponseDto {
   @ApiProperty()
   readonly id!: string;
 
-  @ApiProperty()
-  readonly opdId!: string;
+  @ApiProperty({ format: 'uuid' })
+  readonly workspaceId!: string;
 
   @ApiProperty()
   readonly namaPelaksana!: string;
