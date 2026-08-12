@@ -8,25 +8,20 @@
 import { Activity } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
-import type {
-  BagianSOP,
-  PenyusunWorkbenchLogEdit,
-} from '@/types/dto/sop.dto'
+import type { PenyusunWorkbenchLogEdit } from '@/types/dto/sop.dto'
 
-const BAGIAN_LABEL: Record<BagianSOP, string> = {
+type BagianSop = PenyusunWorkbenchLogEdit['bagian']
+
+const BAGIAN_LABEL: Record<BagianSop, string> = {
   HEADER: 'Header SOP',
   LANGKAH: 'Langkah',
   STATUS: 'Status',
-  UMPAN_BALIK: 'Umpan balik evaluasi',
-  EVALUASI: 'Evaluasi',
 }
 
-const BAGIAN_BADGE_CLASS: Record<BagianSOP, string> = {
+const BAGIAN_BADGE_CLASS: Record<BagianSop, string> = {
   HEADER: 'bg-blue-100 text-blue-700 border-blue-200',
   LANGKAH: 'bg-purple-100 text-purple-700 border-purple-200',
   STATUS: 'bg-amber-100 text-amber-700 border-amber-200',
-  UMPAN_BALIK: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  EVALUASI: 'bg-rose-100 text-rose-700 border-rose-200',
 }
 
 function formatTime(iso: string): string {
@@ -89,15 +84,14 @@ export function RiwayatStatusPanel({ entries }: RiwayatStatusPanelProps) {
     )
   }
 
-  /* Asumsi server sudah mengurutkan terbaru di atas (lihat findWorkbenchPayload). */
   const groups: Array<{ key: string; label: string; items: PenyusunWorkbenchLogEdit[] }> = []
   for (const entry of entries) {
-    const k = dayKey(entry.createdAt)
+    const key = dayKey(entry.createdAt)
     const existing = groups[groups.length - 1]
-    if (existing !== undefined && existing.key === k) {
+    if (existing !== undefined && existing.key === key) {
       existing.items.push(entry)
     } else {
-      groups.push({ key: k, label: formatDayHeader(entry.createdAt), items: [entry] })
+      groups.push({ key, label: formatDayHeader(entry.createdAt), items: [entry] })
     }
   }
 
@@ -109,17 +103,16 @@ export function RiwayatStatusPanel({ entries }: RiwayatStatusPanelProps) {
           <div className="relative pl-4">
             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
             <ul className="space-y-3">
-              {group.items.map((entry, i) => {
-                const aktorNama = entry.user?.nama ?? entry.userId ?? 'Tidak diketahui'
-                const aktorRole = entry.aktorRole ?? ''
+              {group.items.map((entry, index) => {
+                const actorName = entry.user?.nama ?? entry.userId ?? 'Tidak diketahui'
                 const isOngoing = entry.closedAt === null || entry.closedAt === undefined
-                const summary = entry.keterangan ?? `${BAGIAN_LABEL[entry.bagian]}`
+                const summary = entry.keterangan ?? BAGIAN_LABEL[entry.bagian]
                 const count = entry.meta?.count ?? 1
                 return (
                   <li key={entry.id} className="relative flex gap-3">
                     <span
                       className={`absolute -left-[13px] top-1.5 w-3 h-3 rounded-full border-2 border-white ${
-                        i === 0 ? 'bg-blue-500' : 'bg-surface-strong'
+                        index === 0 ? 'bg-blue-500' : 'bg-surface-strong'
                       }`}
                     />
                     <div className="flex-1 min-w-0">
@@ -133,21 +126,16 @@ export function RiwayatStatusPanel({ entries }: RiwayatStatusPanelProps) {
                         <span className="text-[10px] text-muted-foreground">
                           {formatTime(entry.createdAt)}
                         </span>
-                        {isOngoing && (
+                        {isOngoing ? (
                           <span className="inline-flex min-h-6 items-center rounded-md border border-amber-500 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900">
                             berlangsung
                           </span>
-                        )}
-                        {!isOngoing && count > 1 && (
+                        ) : null}
+                        {!isOngoing && count > 1 ? (
                           <span className="text-[10px] text-muted-foreground">{count} perubahan</span>
-                        )}
+                        ) : null}
                       </div>
-                      <p className="text-xs text-secondary-foreground mt-0.5">
-                        {aktorNama}
-                        {aktorRole.length > 0 && (
-                          <span className="text-muted-foreground"> ({aktorRole})</span>
-                        )}
-                      </p>
+                      <p className="text-xs text-secondary-foreground mt-0.5">{actorName}</p>
                       <p className="text-[11px] text-secondary-foreground mt-1">{summary}</p>
                     </div>
                   </li>

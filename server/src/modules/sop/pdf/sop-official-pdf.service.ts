@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
-import { assertValidPdfBuffer } from '../../tte/shared/utils/pdf-signature-verification.util';
+import { assertValidPdfBuffer } from './pdf-buffer.util';
 
 const SIGNATURE_QR_DRAW_SIZE = 54;
 const SIGNATURE_QR_RENDER_SIZE = 192;
@@ -62,13 +62,6 @@ export function resolveSignatureQrPlacement(pageSize: { width: number; height: n
   };
 }
 
-/**
- * Area isi kolom TANGGAL EFEKTIF pada lembar header PDF SOP.
- *
- * Renderer React PDF membuat empat baris metadata setinggi 14pt pada panel kanan.
- * Server menutup isi lama (biasanya "-") di dalam border sel, kemudian menuliskan
- * tanggal pengesahan yang menjadi sumber kebenaran transaksi TTE.
- */
 export function resolveEffectiveDatePlacement(pageSize: { width: number; height: number }): {
   x: number;
   y: number;
@@ -147,8 +140,6 @@ export class SopOfficialPdfService {
       const font = await pdfDocument.embedFont(StandardFonts.Helvetica);
       const effectiveDateText = formatTanggalEfektifWib(params.tanggalEfektif);
 
-      // PDF kanvas dibuat sebelum transaksi final, sehingga nilai lama masih kosong.
-      // Timpa hanya bagian dalam sel agar border tabel tidak ikut tertutup.
       firstPage.drawRectangle({
         ...effectiveDatePlacement,
         color: rgb(1, 1, 1),
@@ -163,7 +154,6 @@ export class SopOfficialPdfService {
         color: rgb(0, 0, 0),
       });
 
-      // Sel tanda tangan Kepala OPD memakai inset dari sudut kanan atas halaman.
       firstPage.drawImage(
         qrImage,
         resolveSignatureQrPlacement({

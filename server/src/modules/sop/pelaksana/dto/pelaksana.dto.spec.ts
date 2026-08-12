@@ -5,31 +5,32 @@ import { UpdatePelaksanaDto } from './update-pelaksana.dto';
 describe('Pengujian DTO Pelaksana', () => {
   const validUuid = '11111111-1111-4111-8111-111111111111';
 
-  it('seharusnya menerima create tanpa opdId karena OPD dapat diambil dari user', async () => {
+  it('seharusnya menerima create dengan workspaceId UUID valid', async () => {
+    const dto = new CreatePelaksanaDto();
+    Object.assign(dto, { workspaceId: validUuid, namaPelaksana: 'Staf A' });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
+  it('seharusnya menolak create tanpa workspaceId', async () => {
     const dto = new CreatePelaksanaDto();
     Object.assign(dto, { namaPelaksana: 'Staf A' });
 
-    await expect(validate(dto)).resolves.toHaveLength(0);
+    const errors = await validate(dto);
+    expect(errors.map((error) => error.property)).toContain('workspaceId');
   });
 
-  it('seharusnya menerima create dengan opdId UUID valid', async () => {
+  it('seharusnya menolak create dengan workspaceId bukan UUID', async () => {
     const dto = new CreatePelaksanaDto();
-    Object.assign(dto, { opdId: validUuid, namaPelaksana: 'Staf A' });
-
-    await expect(validate(dto)).resolves.toHaveLength(0);
-  });
-
-  it('seharusnya menolak create dengan opdId bukan UUID', async () => {
-    const dto = new CreatePelaksanaDto();
-    Object.assign(dto, { opdId: 'opd-1', namaPelaksana: 'Staf A' });
+    Object.assign(dto, { workspaceId: 'workspace-1', namaPelaksana: 'Staf A' });
 
     const errors = await validate(dto);
-    expect(errors.map((error) => error.property)).toContain('opdId');
+    expect(errors.map((error) => error.property)).toContain('workspaceId');
   });
 
   it('seharusnya menolak namaPelaksana kosong pada create dan update', async () => {
     const createDto = new CreatePelaksanaDto();
-    Object.assign(createDto, { namaPelaksana: '' });
+    Object.assign(createDto, { workspaceId: validUuid, namaPelaksana: '' });
     const updateDto = new UpdatePelaksanaDto();
     Object.assign(updateDto, { namaPelaksana: '' });
 

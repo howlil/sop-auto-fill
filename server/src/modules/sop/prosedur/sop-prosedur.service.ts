@@ -1,14 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { assertDetailSopEditable } from '../../../common/status/sop-editable.util';
 import type { JwtAccessPayload } from '../../../common';
-import { JenisLangkahProsedur, PeranPengguna, Prisma } from '../../../generated/prisma';
-import { UserOpdAccessService } from '../../core/opd/user-opd-access.service';
+import { JenisLangkahProsedur, Prisma } from '../../../generated/prisma';
 import { SopCatalogService } from '../catalog/sop-catalog.service';
 import type { PenyusunWorkbenchDataDto } from '../catalog/dto/penyusun-workbench-data.dto';
 import type { LangkahPatchItem } from './dto/langkah-patch-item.dto';
@@ -27,13 +25,8 @@ export class SopProsedurService {
   constructor(
     private readonly sopProsedurRepository: SopProsedurRepository,
     private readonly sopCatalogService: SopCatalogService,
-    private readonly userOpdAccessService: UserOpdAccessService,
   ) {}
 
-  /**
-   * PATCH prosedur SOP. `detailOrSopId` boleh `detailSopId` atau `sopId` (versi terbaru dipakai).
-   * Mengembalikan area kerja terbaru (respons = muatan data lengkap, ramah simpan otomatis setQueryData).
-   */
   async updateProsedur(
     user: JwtAccessPayload,
     detailOrSopId: string,
@@ -41,26 +34,21 @@ export class SopProsedurService {
     logsLimit?: number,
   ): Promise<PenyusunWorkbenchDataDto> {
     const resolved = await this.sopProsedurRepository.findDetailIdByDetailOrSopId(detailOrSopId);
-    if (resolved === null) {
+    if (resolved === null || resolved.ownerId !== user.sub) {
       throw new NotFoundException('DetailSOP tidak ditemukan');
     }
-
-    await this.assertPenyusunOpdAccess(user, resolved.sopOpdId);
-    const detailStatus = await this.sopProsedurRepository.findDetailStatus(resolved.detailSopId);
-    if (detailStatus === null) {
-      throw new NotFoundException('DetailSOP tidak ditemukan');
-    }
-    assertDetailSopEditable(detailStatus);
+    assertDetailSopEditable(resolved.status);
 
     const changedFields = this.collectChangedFields(dto);
     if (changedFields.length === 0) {
-      /* Tidak ada perubahan domain — langsung kembalikan area kerja saat ini agar
-         klien tetap menerima respons konsisten (simpan otomatis tertunda kadang
-         memicu PATCH kosong saat pengguna batal mengetik). */
       return this.sopCatalogService.getPenyusunWorkbench(user, resolved.detailSopId, logsLimit);
     }
 
-    const repoInput = await this.buildRepoInput(dto, resolved.detailSopId, resolved.sopOpdId);
+    const repoInput = await this.buildRepoInput(
+      dto,
+      resolved.detailSopId,
+      resolved.workspaceId,
+    );
 
     try {
       await this.runUpdateProsedurTransactionWithRetry({
@@ -72,15 +60,15 @@ export class SopProsedurService {
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === 'P2002') {
-          throw new ConflictException('Konflik unik pada langkah/jalur pelaksana');
+          throw new ConflictException('Konflik unik pada langkah atau jalur pelaksana');
         }
         if (err.code === 'P2003' || err.code === 'P2025') {
-          throw new BadRequestException('Referensi tidak valid pada muatan data');
+          throw new BadRequestException('Referensi tidak valid pada muatan prosedur');
         }
       }
       const message = err instanceof Error ? err.message : '';
       if (message.includes('Langkah tujuan cabang')) {
-        throw new BadRequestException('Langkah tujuan harus berada dalam DetailSOP yang sama');
+        throw new BadRequestException('Langkah tujuan harus berada dalam SOP yang sama');
       }
       throw err;
     }
@@ -113,19 +101,6 @@ export class SopProsedurService {
     throw lastError;
   }
 
-  private async assertPenyusunOpdAccess(user: JwtAccessPayload, sopOpdId: string): Promise<void> {
-    if (user.peran !== PeranPengguna.PENYUSUN && user.peran !== PeranPengguna.PJ_PENYUSUN) {
-      /* Guard di controller seharusnya sudah memblokir, tapi pengaman runtime tetap perlu
-         agar logic OPD scoping di bawah aman dipakai. */
-      throw new ForbiddenException('Akses ditolak: hanya penyusun yang dapat mengubah prosedur');
-    }
-    await this.userOpdAccessService.assertSameOpd(
-      user.sub,
-      sopOpdId,
-      'Akses ditolak untuk DetailSOP ini',
-    );
-  }
-
   private collectChangedFields(dto: UpdateSopProsedurDto): string[] {
     const out: string[] = [];
     if (dto.pelaksana !== undefined) out.push('pelaksana');
@@ -133,86 +108,65 @@ export class SopProsedurService {
     return out;
   }
 
-  /**
-   * Validasi referensial DTO + bentuk input untuk repository:
-   * - Duplikat `pelaksanaId` di muatan data jalur pelaksana dilarang.
-   * - Setiap `pelaksanaId` master harus berasal dari OPD pemilik SOP.
-   * - Setiap `tempId` unik di muatan data langkah; `langkahSelanjutnya*TempId` harus
-   *   merujuk `tempId` yang ada.
-   * - Untuk jenis `KEPUTUSAN`, minimal satu cabang (Ya/Tidak) harus diset.
-   * - Untuk jenis non-KEPUTUSAN, cabang otomatis diabaikan (di-set null).
-   * - `pelaksanaId` per langkah (bila diset) harus muncul di muatan data jalur pelaksana
-   *   (jika diset) atau jalur pelaksana yang ada.
-   */
   private async buildRepoInput(
     dto: UpdateSopProsedurDto,
     detailSopId: string,
-    sopOpdId: string,
+    workspaceId: string,
   ): Promise<UpdateSopProsedurRepoInput> {
     const out: UpdateSopProsedurRepoInput = {};
-
     let allowedPelaksanaIds: Set<string> | null = null;
 
     if (dto.pelaksana !== undefined) {
       const seen = new Set<string>();
       const dedup: { pelaksanaId: string }[] = [];
-      for (const p of dto.pelaksana) {
-        if (seen.has(p.pelaksanaId)) {
-          throw new BadRequestException(`Pelaksana duplikat di jalur pelaksana: ${p.pelaksanaId}`);
+      for (const item of dto.pelaksana) {
+        if (seen.has(item.pelaksanaId)) {
+          throw new BadRequestException(`Pelaksana duplikat: ${item.pelaksanaId}`);
         }
-        seen.add(p.pelaksanaId);
-        dedup.push({ pelaksanaId: p.pelaksanaId });
+        seen.add(item.pelaksanaId);
+        dedup.push({ pelaksanaId: item.pelaksanaId });
       }
       if (dedup.length > 0) {
-        const valid = await this.sopProsedurRepository.findPelaksanaIdsByOpd(
-          sopOpdId,
-          dedup.map((p) => p.pelaksanaId),
+        const valid = await this.sopProsedurRepository.findPelaksanaIdsByWorkspace(
+          workspaceId,
+          dedup.map((item) => item.pelaksanaId),
         );
-        for (const p of dedup) {
-          if (!valid.has(p.pelaksanaId)) {
+        for (const item of dedup) {
+          if (!valid.has(item.pelaksanaId)) {
             throw new BadRequestException(
-              `Pelaksana ${p.pelaksanaId} harus dari OPD yang sama dengan SOP (jalur pelaksana)`,
+              `Pelaksana ${item.pelaksanaId} harus berasal dari workspace SOP`,
             );
           }
         }
       }
       out.pelaksana = dedup;
-      allowedPelaksanaIds = new Set(dedup.map((p) => p.pelaksanaId));
+      allowedPelaksanaIds = new Set(dedup.map((item) => item.pelaksanaId));
     }
 
     if (dto.langkah !== undefined) {
-      const langkah = dto.langkah;
       const tempIds = new Set<string>();
-      for (const item of langkah) {
+      for (const item of dto.langkah) {
         if (tempIds.has(item.tempId)) {
           throw new BadRequestException(`tempId duplikat: ${item.tempId}`);
         }
         tempIds.add(item.tempId);
       }
 
-      /* Resolusi pelaksana yang valid:
-         - jika dto.pelaksana di-set: pakai itu sebagai allowed
-         - jika tidak: cek terhadap jalur pelaksana yang ada di DB */
       let allowedForLangkah = allowedPelaksanaIds;
       if (allowedForLangkah === null) {
-        const existing =
-          await this.sopProsedurRepository.findExistingSwimlanePelaksanaIds(detailSopId);
-        allowedForLangkah = new Set(existing);
+        allowedForLangkah = new Set(
+          await this.sopProsedurRepository.findExistingSwimlanePelaksanaIds(detailSopId),
+        );
       }
 
-      /* `defaultPelaksanaId` dipakai bila langkah tidak set `pelaksanaId` — diambil
-         dari jalur pelaksana index 0 sebagai nilai cadangan yang masuk akal
-         (LangkahSOP.pelaksanaId wajib di DB). */
       const defaultPelaksanaId =
         out.pelaksana !== undefined && out.pelaksana.length > 0
           ? out.pelaksana[0].pelaksanaId
           : (Array.from(allowedForLangkah)[0] ?? null);
 
-      const repoLangkah: RepoLangkahPatchItem[] = langkah.map((item) =>
+      out.langkah = dto.langkah.map((item) =>
         this.toRepoLangkahItem(item, allowedForLangkah, tempIds, defaultPelaksanaId),
       );
-
-      out.langkah = repoLangkah;
       out.defaultPelaksanaId = defaultPelaksanaId;
     }
 
@@ -227,7 +181,7 @@ export class SopProsedurService {
   ): RepoLangkahPatchItem {
     if (item.pelaksanaId !== undefined && !allowedPelaksanaIds.has(item.pelaksanaId)) {
       throw new BadRequestException(
-        `pelaksanaId ${item.pelaksanaId} pada langkah '${item.tempId}' harus dari OPD yang sama dengan SOP (tidak ada di jalur pelaksana)`,
+        `pelaksanaId ${item.pelaksanaId} pada langkah '${item.tempId}' tidak ada pada jalur pelaksana`,
       );
     }
 
@@ -241,7 +195,7 @@ export class SopProsedurService {
         !knownTempIds.has(item.langkahSelanjutnyaYaTempId)
       ) {
         throw new BadRequestException(
-          `Cabang Ya pada langkah '${item.tempId}' merujuk tempId tidak dikenal: ${item.langkahSelanjutnyaYaTempId}`,
+          `Cabang Ya pada '${item.tempId}' merujuk tempId tidak dikenal`,
         );
       }
       if (
@@ -250,19 +204,17 @@ export class SopProsedurService {
         !knownTempIds.has(item.langkahSelanjutnyaTidakTempId)
       ) {
         throw new BadRequestException(
-          `Cabang Tidak pada langkah '${item.tempId}' merujuk tempId tidak dikenal: ${item.langkahSelanjutnyaTidakTempId}`,
+          `Cabang Tidak pada '${item.tempId}' merujuk tempId tidak dikenal`,
         );
       }
       yaTempId = item.langkahSelanjutnyaYaTempId ?? null;
       tidakTempId = item.langkahSelanjutnyaTidakTempId ?? null;
     }
 
-    /* Pelaksana cadangan: kalau langkah tidak set, ambil default; kalau default null
-       dan langkah juga tidak set, lempar error karena LangkahSOP.pelaksanaId wajib di DB. */
     const resolvedPelaksana = item.pelaksanaId ?? defaultPelaksanaId;
     if (resolvedPelaksana === null || resolvedPelaksana === undefined) {
       throw new BadRequestException(
-        `Langkah '${item.tempId}' tidak punya pelaksana (jalur pelaksana kosong dan pelaksanaId tidak diset)`,
+        `Langkah '${item.tempId}' tidak mempunyai pelaksana`,
       );
     }
 
@@ -296,7 +248,5 @@ function isTransientTransactionError(err: unknown): boolean {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

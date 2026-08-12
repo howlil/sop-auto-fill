@@ -1,6 +1,4 @@
 import { Input } from '@/components/ui/input'
-import type { TTESignaturePayload } from '@/types/dto/tte.dto'
-import { TTESignatureBlock } from '@/components/tte/tte-signature-block'
 import { SOP_INSTITUTION_LOGO_URL } from '@/lib/sop/sop-institution-logo'
 import {
   formatIsoToDdMmYyyyWib,
@@ -14,9 +12,7 @@ export interface SOPHeaderInfoProps {
   createdDate?: string
   revisionDate?: string
   effectiveDate?: string
-  /** Diabaikan untuk tampilan: logo memakai aset provinsi (lihat `SOP_INSTITUTION_LOGO_URL`). */
   institutionLogo?: string
-  /** Baris-baris nama/detail lembaga (maks 4 baris), dari API / `namaLembaga` terpecah baris. */
   institutionLines?: string[]
   picName: string
   picNumber: string
@@ -28,8 +24,6 @@ export interface SOPHeaderInfoProps {
   warning?: string | string[]
   recordData?: string[]
   signature?: string
-  /** Tanda tangan elektronik BSRE (jika SOP sudah disahkan dengan TTE). */
-  tteSignaturePayload?: TTESignaturePayload | null
   editable?: boolean
   onMetadataChange?: (field: string, value: unknown) => void
 }
@@ -38,6 +32,19 @@ function toArrayField(value: string | string[] | undefined): string[] {
   if (Array.isArray(value)) return value
   if (typeof value === 'string' && value.length > 0) return [value]
   return []
+}
+
+function NumberedList({ items }: { items: string[] }) {
+  if (items.length === 0) return <p> - </p>
+  return (
+    <ol className="list-decimal list-outside ml-5 text-left break-words">
+      {items.map((item, index) => (
+        <li key={index} className="break-words">
+          {item}
+        </li>
+      ))}
+    </ol>
+  )
 }
 
 export function SOPHeaderInfo({
@@ -59,7 +66,6 @@ export function SOPHeaderInfo({
   warning = [],
   recordData = [],
   signature = '',
-  tteSignaturePayload,
   editable = false,
   onMetadataChange,
 }: SOPHeaderInfoProps) {
@@ -67,25 +73,24 @@ export function SOPHeaderInfo({
     if (editable && onMetadataChange) onMetadataChange(field, value)
   }
 
-  /** Tampilan DD/MM/YYYY (Asia/Jakarta) untuk ISO / YYYY-MM-DD / teks DD/MM/YYYY lama. */
   function headerDisplayDate(raw: string): string {
-    const s = raw.trim()
-    if (!s) return ''
-    if (s.includes('T') || s.endsWith('Z')) return formatIsoToDdMmYyyyWib(s)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return formatIsoToDdMmYyyyWib(`${s}T12:00:00+07:00`)
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s
-    return s
+    const value = raw.trim()
+    if (!value) return ''
+    if (value.includes('T') || value.endsWith('Z')) return formatIsoToDdMmYyyyWib(value)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return formatIsoToDdMmYyyyWib(`${value}T12:00:00+07:00`)
+    }
+    return value
   }
 
-  /** Nilai untuk `<input type="date">` (YYYY-MM-DD, hari kalender Jakarta). */
   function headerDateInputValue(raw: string): string {
-    const s = raw.trim()
-    if (!s) return ''
-    if (s.includes('T') || s.endsWith('Z')) return isoToDateInputValueWib(s)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
-      const [dd, mm, yyyy] = s.split('/')
-      if (dd !== undefined && mm !== undefined && yyyy !== undefined) return `${yyyy}-${mm}-${dd}`
+    const value = raw.trim()
+    if (!value) return ''
+    if (value.includes('T') || value.endsWith('Z')) return isoToDateInputValueWib(value)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+      const [dd, mm, yyyy] = value.split('/')
+      if (dd && mm && yyyy) return `${yyyy}-${mm}-${dd}`
     }
     return ''
   }
@@ -102,7 +107,6 @@ export function SOPHeaderInfo({
               <col style={{ width: '27%' }} />
             </colgroup>
             <tbody>
-              {/* Baris 1: Kolom kiri (rowspan 7) = logo + instansi */}
               <tr>
                 <th
                   rowSpan={7}
@@ -111,26 +115,20 @@ export function SOPHeaderInfo({
                   <img
                     className="mx-auto h-36 my-4"
                     src={SOP_INSTITUTION_LOGO_URL}
-                    alt="Logo Provinsi Sumatera Barat"
+                    alt="Logo instansi"
                   />
-                  {institutionLines.length > 0 ? (
-                    <div className="break-words min-w-0">
-                      {institutionLines.slice(0, 4).map((line, idx) => (
+                  <div className="break-words min-w-0">
+                    {(institutionLines.length > 0 ? institutionLines.slice(0, 4) : ['—']).map(
+                      (line, index) => (
                         <p
-                          key={idx}
+                          key={index}
                           className="m-0 font-semibold text-sm leading-tight break-words"
                         >
                           {line}
                         </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="break-words min-w-0">
-                      <p className="m-0 font-semibold text-sm leading-tight break-words text-secondary-foreground">
-                        —
-                      </p>
-                    </div>
-                  )}
+                      ),
+                    )}
+                  </div>
                 </th>
               </tr>
               <tr>
@@ -143,7 +141,7 @@ export function SOPHeaderInfo({
                     <Input
                       className="h-6 text-xs border-0 p-0 min-h-0 w-full bg-transparent break-words"
                       value={number}
-                      onChange={(e) => handleChange('number', e.target.value)}
+                      onChange={(event) => handleChange('number', event.target.value)}
                     />
                   ) : (
                     <span className="break-words">{number || ' - '}</span>
@@ -161,7 +159,7 @@ export function SOPHeaderInfo({
                       type="date"
                       className="h-6 text-xs border-0 p-0 min-h-0 w-full bg-transparent"
                       value={headerDateInputValue(createdDate)}
-                      onChange={(e) => handleChange('createdDate', e.target.value)}
+                      onChange={(event) => handleChange('createdDate', event.target.value)}
                     />
                   ) : (
                     headerDisplayDate(createdDate)
@@ -179,10 +177,12 @@ export function SOPHeaderInfo({
                       type="date"
                       className="h-6 text-xs border-0 p-0 min-h-0 w-full bg-transparent"
                       value={headerDateInputValue(revisionDate)}
-                      onChange={(e) => handleChange('revisionDate', e.target.value)}
+                      onChange={(event) => handleChange('revisionDate', event.target.value)}
                     />
+                  ) : revisionDate && version > 1 ? (
+                    headerDisplayDate(revisionDate)
                   ) : (
-                    revisionDate && version > 1 ? headerDisplayDate(revisionDate) : ''
+                    ''
                   )}
                 </td>
               </tr>
@@ -192,7 +192,7 @@ export function SOPHeaderInfo({
                 </td>
                 <td className="border-2 border-r-0 py-0.5 px-2 border-black text-center">:</td>
                 <td className="border-2 border-l-0 py-0.5 px-2 border-black min-w-0 break-words">
-                  {effectiveDate.trim() !== '' ? headerDisplayDate(effectiveDate) : '—'}
+                  {effectiveDate.trim() ? headerDisplayDate(effectiveDate) : '—'}
                 </td>
               </tr>
               <tr>
@@ -202,32 +202,20 @@ export function SOPHeaderInfo({
                 <td className="align-top border-2 border-r-0 py-0.5 px-2 border-black text-center">:</td>
                 <td className="text-center font-semibold border-2 border-l-0 py-0.5 px-2 border-black min-w-0 break-words">
                   <div className="min-h-[6rem]">
-                    {tteSignaturePayload ? (
-                      <TTESignatureBlock
-                        payload={tteSignaturePayload}
-                        qrSize={72}
-                        showRoleLabel={false}
-                        showCaption={false}
-                        showSignedDate={false}
-                      />
-                    ) : (
-                      <>
-                        <p>{picRole},</p>
-                        <div className="flex justify-center h-24 min-h-24">
-                          {signature ? (
-                            <img
-                              src={signature}
-                              alt="Tanda Tangan"
-                              className="max-w-full max-h-24 object-contain"
-                            />
-                          ) : null}
-                        </div>
-                        <p className="min-h-[1.25rem]">{picName.trim() !== '' ? picName : '\u2014'}</p>
-                        <p className="text-xs font-normal">
-                          {picNumber.trim() !== '' ? `NIP. ${picNumber}` : 'NIP. \u2014'}
-                        </p>
-                      </>
-                    )}
+                    <p>{picRole},</p>
+                    <div className="flex justify-center h-24 min-h-24">
+                      {signature ? (
+                        <img
+                          src={signature}
+                          alt="Tanda tangan"
+                          className="max-w-full max-h-24 object-contain"
+                        />
+                      ) : null}
+                    </div>
+                    <p className="min-h-[1.25rem]">{picName.trim() || '—'}</p>
+                    <p className="text-xs font-normal">
+                      {picNumber.trim() ? `NIP. ${picNumber}` : 'NIP. —'}
+                    </p>
                   </div>
                 </td>
               </tr>
@@ -236,10 +224,11 @@ export function SOPHeaderInfo({
                   SOP
                 </td>
                 <td className="border-2 border-r-0 py-0.5 px-2 border-black text-center">:</td>
-                <td className="font-semibold border-2 border-l-0 py-0.5 px-2 border-black min-w-0 break-words">{name || ' - '}</td>
+                <td className="font-semibold border-2 border-l-0 py-0.5 px-2 border-black min-w-0 break-words">
+                  {name || ' - '}
+                </td>
               </tr>
 
-              {/* DASAR HUKUM | KUALIFIKASI PELAKSANAAN */}
               <tr>
                 <td className="font-semibold border-2 py-0.5 px-2 border-black overflow-hidden">DASAR HUKUM</td>
                 <td colSpan={3} className="font-semibold border-2 py-0.5 px-2 border-black overflow-hidden">
@@ -248,30 +237,13 @@ export function SOPHeaderInfo({
               </tr>
               <tr>
                 <td className="align-top border-2 py-0.5 px-2 border-black min-w-0 break-words">
-                  {lawBasis.length > 0 ? (
-                    <ol className="list-decimal list-outside ml-5 text-left break-words">
-                      {lawBasis.map((item, i) => (
-                        <li key={i} className="break-words">{item}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p> - </p>
-                  )}
+                  <NumberedList items={lawBasis} />
                 </td>
                 <td colSpan={3} className="align-top border-2 py-0.5 px-2 border-black min-w-0 break-words">
-                  {implementQualification.length > 0 ? (
-                    <ol className="list-decimal list-outside ml-5 text-left break-words">
-                      {implementQualification.map((item, i) => (
-                        <li key={i} className="break-words">{item}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p> - </p>
-                  )}
+                  <NumberedList items={implementQualification} />
                 </td>
               </tr>
 
-              {/* KETERKAITAN | PERALATAN */}
               <tr>
                 <td className="font-semibold border-2 py-0.5 px-2 border-black overflow-hidden">
                   KETERKAITAN DENGAN SOP LAIN
@@ -282,30 +254,13 @@ export function SOPHeaderInfo({
               </tr>
               <tr>
                 <td className="align-top border-2 py-0.5 px-2 border-black min-w-0 break-words">
-                  {relatedSop.length > 0 ? (
-                    <ol className="list-decimal list-outside ml-5 text-left break-words">
-                      {relatedSop.map((item, i) => (
-                        <li key={i} className="break-words">{item}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p> - </p>
-                  )}
+                  <NumberedList items={relatedSop} />
                 </td>
                 <td colSpan={3} className="align-top border-2 py-0.5 px-2 border-black min-w-0 break-words">
-                  {equipment.length > 0 ? (
-                    <ol className="list-decimal list-outside ml-5 text-left break-words">
-                      {equipment.map((item, i) => (
-                        <li key={i} className="break-words">{item}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p> - </p>
-                  )}
+                  <NumberedList items={equipment} />
                 </td>
               </tr>
 
-              {/* PERINGATAN | PENCATATAN DAN PENDATAAN */}
               <tr>
                 <td className="font-semibold border-2 py-0.5 px-2 border-black overflow-hidden">PERINGATAN</td>
                 <td colSpan={3} className="font-semibold border-2 py-0.5 px-2 border-black overflow-hidden">
@@ -314,21 +269,13 @@ export function SOPHeaderInfo({
               </tr>
               <tr>
                 <td className="align-top border-2 py-0.5 px-2 border-black min-w-0 break-words">
-                  {toArrayField(warning).length > 0 ? (
-                    <ol className="list-decimal list-outside ml-5 text-left break-words">
-                      {toArrayField(warning).map((item, i) => (
-                        <li key={i} className="break-words">{item}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p> - </p>
-                  )}
+                  <NumberedList items={toArrayField(warning)} />
                 </td>
                 <td colSpan={3} className="align-top border-2 py-0.5 px-2 border-black min-w-0 break-words">
                   {recordData.length > 0 ? (
                     <ul className="m-0 list-none p-0 text-left break-words space-y-1">
-                      {recordData.map((item, i) => (
-                        <li key={i} className="break-words p-0">
+                      {recordData.map((item, index) => (
+                        <li key={index} className="break-words p-0">
                           - {item}
                         </li>
                       ))}

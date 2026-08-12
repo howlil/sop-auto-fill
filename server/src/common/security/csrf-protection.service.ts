@@ -1,10 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
-import {
-  ACCESS_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_NAME,
-} from '../../modules/core/auth/helpers/auth.shared';
+import { ACCESS_TOKEN_COOKIE_NAME } from '../../modules/core/auth/helpers/auth.shared';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const CSRF_HEADER_NAME = 'x-csrf-token';
@@ -26,9 +23,7 @@ function readHeader(req: Pick<Request, 'headers'>, name: string): string | undef
 
 function hasCookie(req: Pick<Request, 'cookies'>, name: string): boolean {
   const cookies: unknown = req.cookies;
-  if (typeof cookies !== 'object' || cookies === null) {
-    return false;
-  }
+  if (typeof cookies !== 'object' || cookies === null) return false;
   const value = (cookies as Record<string, unknown>)[name];
   return typeof value === 'string' && value.length > 0;
 }
@@ -42,21 +37,18 @@ export class CsrfProtectionService {
     this.enabled = config.get<string>('NODE_ENV', 'development') === 'production';
     const publicOrigin = config.get<string>('PUBLIC_APP_ORIGIN', '').trim();
     const configuredOrigins = config.get<string>('ALLOWED_ORIGINS', '');
-    const origins = [publicOrigin, ...configuredOrigins.split(',')]
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map(normalizeOrigin)
-      .filter((entry): entry is string => entry !== null);
-    this.allowedOrigins = new Set(origins);
+    this.allowedOrigins = new Set(
+      [publicOrigin, ...configuredOrigins.split(',')]
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map(normalizeOrigin)
+        .filter((entry): entry is string => entry !== null),
+    );
   }
 
   assertRequest(req: Pick<Request, 'method' | 'path' | 'headers' | 'cookies'>): void {
-    if (!this.enabled || SAFE_METHODS.has(req.method.toUpperCase())) {
-      return;
-    }
-    if (!this.requiresProtection(req)) {
-      return;
-    }
+    if (!this.enabled || SAFE_METHODS.has(req.method.toUpperCase())) return;
+    if (!this.requiresProtection(req)) return;
 
     const fetchSite = readHeader(req, 'sec-fetch-site')?.toLowerCase();
     if (fetchSite === 'cross-site') {
@@ -69,16 +61,13 @@ export class CsrfProtectionService {
       throw new ForbiddenException('Origin permintaan tidak diizinkan');
     }
 
-    const csrfHeader = readHeader(req, CSRF_HEADER_NAME);
-    if (csrfHeader !== CSRF_HEADER_VALUE) {
+    if (readHeader(req, CSRF_HEADER_NAME) !== CSRF_HEADER_VALUE) {
       throw new ForbiddenException('Header proteksi CSRF tidak valid');
     }
   }
 
   private requiresProtection(req: Pick<Request, 'path' | 'cookies'>): boolean {
-    if (/\/auth\/(login|refresh|logout)$/.test(req.path)) {
-      return true;
-    }
-    return hasCookie(req, ACCESS_TOKEN_COOKIE_NAME) || hasCookie(req, REFRESH_TOKEN_COOKIE_NAME);
+    if (/\/auth\/(google|logout)$/.test(req.path)) return true;
+    return hasCookie(req, ACCESS_TOKEN_COOKIE_NAME);
   }
 }

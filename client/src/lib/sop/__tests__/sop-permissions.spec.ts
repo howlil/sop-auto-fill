@@ -1,33 +1,34 @@
 import { describe, expect, it } from 'vitest'
-import { ROLES } from '@/utils/constants'
 import {
-  canKirimUlangKeEvaluatorAfterRevisi,
+  canBuatVersiBaru,
+  canEditSop,
   canHapusSopDraftAwal,
-  getKirimUlangRoleBlockingReason,
-  isSopEligibleForSigning,
+  canHapusVersiDraft,
 } from '../sop-permissions'
 
 describe('sop-permissions', () => {
-  it('should_only_allow_kepala_opd_signing_after_pj_penyusun_ba_signature', () => {
-    expect(isSopEligibleForSigning({ status: 'MENUNGGU_TTD_PJ_EVALUATOR' })).toBe(false)
-    expect(
-      isSopEligibleForSigning({
-        status: 'DIVERIFIKASI_PJ_EVALUATOR_ORGANISASI',
-      }),
-    ).toBe(true)
+  it('hanya mengizinkan edit pada draft', () => {
+    expect(canEditSop('DRAFT')).toBe(true)
+    expect(canEditSop('COMPLETED')).toBe(false)
+    expect(canEditSop('ARCHIVED')).toBe(false)
   })
 
-  it('should_allow_kirim_ulang_only_for_pj_penyusun', () => {
-    expect(canKirimUlangKeEvaluatorAfterRevisi(ROLES.PJ_PENYUSUN)).toBe(true)
-    expect(canKirimUlangKeEvaluatorAfterRevisi(ROLES.PENYUSUN)).toBe(false)
-    expect(canKirimUlangKeEvaluatorAfterRevisi(null)).toBe(false)
-    expect(getKirimUlangRoleBlockingReason(ROLES.PJ_PENYUSUN)).toBeNull()
-    expect(getKirimUlangRoleBlockingReason(ROLES.PENYUSUN)).toContain('PJ Penyusun')
+  it('mengizinkan versi baru dari SOP completed', () => {
+    expect(canBuatVersiBaru({ status: 'COMPLETED' })).toBe(true)
+    expect(canBuatVersiBaru({ status: 'DRAFT' })).toBe(false)
+    expect(canBuatVersiBaru({ status: 'ARCHIVED' })).toBe(false)
+    expect(canBuatVersiBaru({ status: 'DRAFT', canBuatVersiBaru: true })).toBe(true)
   })
 
-  it('should_only_allow_deleting_initial_sop_draft', () => {
+  it('hanya mengizinkan hapus versi draft ketika server mengizinkan', () => {
+    expect(canHapusVersiDraft('DRAFT', true)).toBe(true)
+    expect(canHapusVersiDraft('DRAFT', false)).toBe(false)
+    expect(canHapusVersiDraft('COMPLETED', true)).toBe(false)
+  })
+
+  it('hanya mengizinkan penghapusan SOP draft awal', () => {
     expect(canHapusSopDraftAwal({ status: 'DRAFT', versi: 1, canHapusSopDraft: true })).toBe(true)
-    expect(canHapusSopDraftAwal({ status: 'SEDANG_DISUSUN', versi: 1, canHapusSopDraft: true })).toBe(false)
+    expect(canHapusSopDraftAwal({ status: 'COMPLETED', versi: 1, canHapusSopDraft: true })).toBe(false)
     expect(canHapusSopDraftAwal({ status: 'DRAFT', versi: 2, canHapusSopDraft: true })).toBe(false)
     expect(canHapusSopDraftAwal({ status: 'DRAFT', versi: 1, canHapusSopDraft: false })).toBe(false)
   })

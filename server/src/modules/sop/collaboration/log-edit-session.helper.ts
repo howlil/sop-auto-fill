@@ -1,34 +1,21 @@
 import type { Prisma } from '../../../generated/prisma';
 import { BagianSOP } from '../../../generated/prisma';
 
-/**
- * Window default antara dua edit yang masih dianggap satu sesi (idle gap < 10 menit).
- * Mengikuti gaya Google Docs: edit beruntun digabung; jika idle melewati window,
- * sesi ditutup dan edit berikutnya membuat sesi baru.
- */
 export const DEFAULT_LOG_SESSION_IDLE_MS = 10 * 60 * 1000;
 
-/** Bentuk meta sesi (memori / respons API), bukan kolom JSON. */
 export interface LogEditSessionMeta {
-  /** Daftar field domain yang berubah selama sesi (union string set). */
   fields: string[];
-  /** Berapa kali append terjadi pada sesi ini. */
   count: number;
 }
 
 export interface AppendLogParams {
-  /** Prisma transaction client. Helper dimaksudkan dijalankan dalam transaksi. */
   tx: Prisma.TransactionClient;
   detailSopId: string;
   penggunaId: string;
   bagian: BagianSOP;
-  /** Daftar field domain yang baru saja berubah pada satu request. */
   fields: string[];
-  /** Force selalu buat entry baru (untuk event diskrit, mis. UMPAN_BALIK/STATUS). */
   discrete?: boolean;
-  /** Override idle window. Default {@link DEFAULT_LOG_SESSION_IDLE_MS}. */
   idleWindowMs?: number;
-  /** Sumber waktu — diparameterkan untuk memudahkan unit test. */
   now?: Date;
 }
 
@@ -47,17 +34,15 @@ const FIELD_LABEL_ID: Record<string, string> = {
   status: 'Status SOP',
   create: 'Membuat',
   delete: 'Menghapus',
+  revisiDariDetailSopId: 'Sumber versi',
 };
 
 const BAGIAN_LABEL_ID: Record<BagianSOP, string> = {
   HEADER: 'Header SOP',
   LANGKAH: 'Langkah Prosedur',
   STATUS: 'Status SOP',
-  UMPAN_BALIK: 'Umpan balik evaluasi',
-  EVALUASI: 'Evaluasi',
 };
 
-/** Id stabil untuk klien (bukan UUID): tripel PK dipisah unit separator. */
 export function encodeLogEditSopClientId(
   detailSopId: string,
   penggunaId: string,
@@ -66,12 +51,10 @@ export function encodeLogEditSopClientId(
   return `${detailSopId}\u001f${penggunaId}\u001f${createdAt.toISOString()}`;
 }
 
-/** Konversi nama field domain ke label Bahasa Indonesia. Field tak dikenal dipakai apa adanya. */
 export function translateField(field: string): string {
   return FIELD_LABEL_ID[field] ?? field;
 }
 
-/** Bangun ringkasan keterangan untuk ditampilkan di tab Aktivitas. */
 export function buildLogSummary(bagian: BagianSOP, meta: LogEditSessionMeta): string {
   const labels = meta.fields.map(translateField);
   const fieldsText = labels.length > 0 ? `: ${labels.join(', ')}` : '';
@@ -80,18 +63,9 @@ export function buildLogSummary(bagian: BagianSOP, meta: LogEditSessionMeta): st
 }
 
 function unionFields(prev: string[], next: string[]): string[] {
-  const set = new Set<string>();
-  for (const v of prev) {
-    if (typeof v === 'string' && v.trim().length > 0) {
-      set.add(v);
-    }
-  }
-  for (const v of next) {
-    if (typeof v === 'string' && v.trim().length > 0) {
-      set.add(v);
-    }
-  }
-  return Array.from(set);
+  return Array.from(
+    new Set([...prev, ...next].filter((value) => value.trim().length > 0)),
+  );
 }
 
 async function replaceDomainFields(
@@ -104,33 +78,23 @@ async function replaceDomainFields(
   await tx.logEditSopDomainField.deleteMany({
     where: { detailSopId, penggunaId, logCreatedAt },
   });
-  const unique = Array.from(
-    new Set(domainFields.filter((f) => typeof f === 'string' && f.trim().length > 0)),
-  );
-  if (unique.length === 0) {
-    return;
+  const unique = Array.from(new Set(domainFields.filter((field) => field.trim().length > 0)));
+  if (unique.length > 0) {
+    await tx.logEditSopDomainField.createMany({
+      data: unique.map((domainField) => ({
+        detailSopId,
+        penggunaId,
+        logCreatedAt,
+        domainField,
+      })),
+    });
   }
-  await tx.logEditSopDomainField.createMany({
-    data: unique.map((domainField) => ({
-      detailSopId,
-      penggunaId,
-      logCreatedAt,
-      domainField,
-    })),
-  });
 }
 
-/**
- * Append-or-create entry log untuk satu (detailSop, pengguna, bagian, targetEntityId).
- *
- * - `discrete=true` selalu buat entry baru `closedAt = now`.
- * - Bila ada sesi terbuka same triple dan `updatedAt > now - idleWindowMs` -> merge.
- * - Bila tidak: tutup sesi terbuka basi (`closedAt = now`) lalu buat sesi baru (`closedAt = null`).
- */
 export async function appendOrCreateLogSession(p: AppendLogParams): Promise<void> {
   const now = p.now ?? new Date();
   const window = p.idleWindowMs ?? DEFAULT_LOG_SESSION_IDLE_MS;
-  const fields = p.fields.filter((f) => typeof f === 'string' && f.trim().length > 0);
+  const fields = p.fields.filter((field) => field.trim().length > 0);
 
   if (p.discrete === true) {
     const meta: LogEditSessionMeta = { fields, count: 1 };
@@ -165,9 +129,8 @@ export async function appendOrCreateLogSession(p: AppendLogParams): Promise<void
   });
 
   if (open !== null) {
-    const prevFields = open.domainFields.map((r) => r.domainField);
     const merged: LogEditSessionMeta = {
-      fields: unionFields(prevFields, fields),
+      fields: unionFields(open.domainFields.map((row) => row.domainField), fields),
       count: open.sesiChangeCount + 1,
     };
     await p.tx.logEditSOP.update({
@@ -193,7 +156,6 @@ export async function appendOrCreateLogSession(p: AppendLogParams): Promise<void
     return;
   }
 
-  /* Tutup sesi terbuka basi same triple agar tidak ada dua sesi terbuka paralel. */
   await p.tx.logEditSOP.updateMany({
     where: {
       detailSopId: p.detailSopId,

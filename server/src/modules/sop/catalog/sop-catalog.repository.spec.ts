@@ -1,153 +1,235 @@
-import {
-  BagianSOP,
-  HasilEvaluasi,
-  StatusPengajuanEvaluasi,
-  StatusSOP,
-  StatusTindakLanjut,
-} from '../../../generated/prisma';
-import type { PrismaService } from '../../../common/prisma/prisma.service';
+import { JenisDiagram, JenisLangkahProsedur, StatusSOP } from '../../../generated/prisma';
 import { SopCatalogRepository } from './sop-catalog.repository';
 
-interface CallLog {
-  table: string;
-  op: string;
-  args: unknown;
+function makeRepository() {
+  const prisma = {
+    sOP: { findMany: jest.fn(), update: jest.fn() },
+    detailSOP: { findUnique: jest.fn(), findFirst: jest.fn() },
+    $transaction: jest.fn(),
+  };
+  return { repository: new SopCatalogRepository(prisma as any), prisma };
 }
 
-function makeStatusTx(): {
-  tx: Record<string, unknown>;
-  calls: CallLog[];
-  setActiveNilai: (nilai: unknown) => void;
-} {
-  const calls: CallLog[] = [];
-  let activeNilai: unknown = null;
-  const record = (table: string, op: string) =>
-    jest.fn(async (args: unknown) => {
-      calls.push({ table, op, args });
-      if (table === 'logEditSOP' && op === 'findFirst') {
-        return null;
-      }
-      if (table === 'nilaiEvaluasi' && op === 'findFirst') {
-        return activeNilai;
-      }
-      if (table === 'pengajuanEvaluasi' && op === 'updateMany') {
-        return { count: 1 };
-      }
-      return { count: 0 };
-    });
-  const tx = {
-    detailSOP: { update: record('detailSOP', 'update') },
-    nilaiEvaluasi: {
-      findFirst: record('nilaiEvaluasi', 'findFirst'),
-      update: record('nilaiEvaluasi', 'update'),
+const dbRow = {
+  sopId: 'sop-1',
+  workspaceId: 'workspace-1',
+  judul: 'SOP Pengujian',
+  status: StatusSOP.DRAFT,
+  updatedAt: new Date('2026-08-02T00:00:00.000Z'),
+  detailSops: [
+    {
+      detailSopId: 'detail-1',
+      nomorSOP: '001/SOP',
+      versi: 1,
+      updatedAt: new Date('2026-08-02T00:00:00.000Z'),
+      dibuatOleh: { name: 'Pembuat' },
+      terakhirDieditOleh: { name: 'Editor' },
+      dasarHukum: [{ peraturanId: 'peraturan-1' }],
     },
-    logNilaiEvaluasi: {
-      create: record('logNilaiEvaluasi', 'create'),
-    },
-    pengajuanEvaluasi: {
-      updateMany: record('pengajuanEvaluasi', 'updateMany'),
-    },
-    logEditSOP: {
-      findFirst: record('logEditSOP', 'findFirst'),
-      create: record('logEditSOP', 'create'),
-      update: record('logEditSOP', 'update'),
-      updateMany: record('logEditSOP', 'updateMany'),
-    },
-    logEditSopDomainField: {
-      deleteMany: record('logEditSopDomainField', 'deleteMany'),
-      createMany: record('logEditSopDomainField', 'createMany'),
-    },
-  };
-  return {
-    tx,
-    calls,
-    setActiveNilai: (nilai: unknown) => {
-      activeNilai = nilai;
-    },
-  };
-}
+  ],
+};
 
-describe('Pengujian logging status pada SopCatalogRepository', () => {
-  function makeRepo(): {
-    repo: SopCatalogRepository;
-    calls: CallLog[];
-    setActiveNilai: (nilai: unknown) => void;
-  } {
-    const { tx, calls, setActiveNilai } = makeStatusTx();
-    const prismaMock = {
-      $transaction: jest.fn(async (cb: (inner: unknown) => Promise<void>) => cb(tx)),
-    } as unknown as PrismaService;
-    return { repo: new SopCatalogRepository(prismaMock), calls, setActiveNilai };
-  }
+describe('SopCatalogRepository workspace model', () => {
+  it('mengambil dan memetakan SOP berdasarkan workspace', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.sOP.findMany.mockResolvedValue([dbRow]);
 
-  it('seharusnya menulis log status terpisah ketika memperbarui status detail SOP', async () => {
-    const { repo, calls } = makeRepo();
-    await repo.updateDetailSopStatus({
-      detailSopId: 'det-1',
-      status: StatusSOP.MENUNGGU_PENGAJUAN_EVALUASI,
-      userId: 'u-1',
-    });
-    expect(calls.some((c) => c.table === 'detailSOP' && c.op === 'update')).toBe(true);
-    const logCreate = calls.find((c) => c.table === 'logEditSOP' && c.op === 'create');
-    expect(logCreate).toBeDefined();
-    const data = (logCreate!.args as { data: { bagian: BagianSOP; discrete?: boolean } }).data;
-    expect(data.bagian).toBe(BagianSOP.STATUS);
-    expect(
-      (logCreate!.args as { data: { domainFields: { create: Array<{ domainField: string }> } } })
-        .data.domainFields.create,
-    ).toEqual(expect.arrayContaining([{ domainField: 'status' }]));
+    await expect(repository.findDaftarByWorkspaceId('workspace-1')).resolves.toEqual([
+      {
+        sopId: 'sop-1',
+        workspaceId: 'workspace-1',
+        judul: 'SOP Pengujian',
+        status: StatusSOP.DRAFT,
+        versionCount: 1,
+        detail: {
+          detailSopId: 'detail-1',
+          nomorSOP: '001/SOP',
+          versi: 1,
+          updatedAt: new Date('2026-08-02T00:00:00.000Z'),
+          pembuatNama: 'Pembuat',
+          editorNama: 'Editor',
+          peraturanId: 'peraturan-1',
+        },
+      },
+    ]);
+
+    expect(prisma.sOP.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workspaceId: 'workspace-1' } }),
+    );
   });
 
-  it('seharusnya menulis dua log status terpisah ketika revisi menjadi sedang dievaluasi', async () => {
-    const { repo, calls } = makeRepo();
-    await repo.transitionDetailSopRevisiToSedangDievaluasi({
-      detailSopId: 'det-revisi',
-      userId: 'u-penyusun',
-    });
-    const detailUpdates = calls.filter((c) => c.table === 'detailSOP' && c.op === 'update');
-    expect(detailUpdates).toHaveLength(2);
-    const logCreates = calls.filter((c) => c.table === 'logEditSOP' && c.op === 'create');
-    expect(logCreates).toHaveLength(2);
-    for (const entry of logCreates) {
-      const data = (entry.args as { data: { bagian: BagianSOP } }).data;
-      expect(data.bagian).toBe(BagianSOP.STATUS);
-    }
+  it('menerapkan filter status pada hasil workspace', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.sOP.findMany.mockResolvedValue([dbRow]);
+
+    await expect(
+      repository.findDaftarByWorkspaceId('workspace-1', { status: StatusSOP.COMPLETED }),
+    ).resolves.toEqual([]);
   });
 
-  it('seharusnya otomatis menandai tindak lanjut selesai saat kirim ulang revisi', async () => {
-    const { repo, calls, setActiveNilai } = makeRepo();
-    setActiveNilai({
-      pengajuanEvaluasiId: 'pengajuan-1',
-      detailSopId: 'det-revisi',
-      hasil: HasilEvaluasi.PERLU_PERBAIKAN,
-      catatan: 'Perbaiki keluaran',
-      statusTindakLanjut: StatusTindakLanjut.TERBUKA,
-      pengajuanEvaluasi: { status: StatusPengajuanEvaluasi.SEDANG_DIEVALUASI },
+  it('menerapkan filter tanggal terhadap detail terbaru', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.sOP.findMany.mockResolvedValue([dbRow]);
+
+    await expect(
+      repository.findDaftarByWorkspaceId('workspace-1', { tanggalDari: '2026-08-03' }),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.findDaftarByWorkspaceId('workspace-1', { tanggalSampai: '2026-08-02' }),
+    ).resolves.toHaveLength(1);
+  });
+
+  it('meng-clone isi authoring, graph langkah, dan override diagram ke versi baru', async () => {
+    const { repository, prisma } = makeRepository();
+    const source = {
+      detailSopId: 'detail-1',
+      sopId: 'sop-1',
+      nomorSOP: '001/SOP',
+      namaLembaga: 'Biro Organisasi',
+      sop: { status: StatusSOP.COMPLETED },
+      lampiranPeringatan: [{ teks: 'Waspada' }],
+      lampiranKualifikasiPelaksanaan: [{ teks: 'Memahami proses' }],
+      lampiranPeralatanPerlengkapan: [{ teks: 'Komputer' }],
+      lampiranPencatatanPendataan: [{ teks: 'Arsip digital' }],
+      dasarHukum: [{ peraturanId: 'peraturan-1' }],
+      swimlanes: [{ pelaksanaId: 'pelaksana-1', urutan: 1 }],
+      relasiSopKeluar: [{ detailSopTerkaitId: 'detail-terkait' }],
+      relasiSopMasuk: [],
+      langkahSOP: [
+        {
+          langkahSopId: 'step-old-1',
+          urutan: 1,
+          kegiatan: 'Periksa',
+          jenis: JenisLangkahProsedur.KEPUTUSAN,
+          kelengkapan: 'Berkas',
+          keluaran: 'Keputusan',
+          waktu: 1,
+          satuanWaktu: null,
+          keterangan: 'Periksa berkas',
+          pelaksanaId: 'pelaksana-1',
+          langkahSelanjutnyaYaId: 'step-old-2',
+          langkahSelanjutnyaTidakId: null,
+        },
+        {
+          langkahSopId: 'step-old-2',
+          urutan: 2,
+          kegiatan: 'Selesai',
+          jenis: JenisLangkahProsedur.KEGIATAN,
+          kelengkapan: 'Keputusan',
+          keluaran: 'Selesai',
+          waktu: 1,
+          satuanWaktu: null,
+          keterangan: 'Selesai',
+          pelaksanaId: 'pelaksana-1',
+          langkahSelanjutnyaYaId: null,
+          langkahSelanjutnyaTidakId: null,
+        },
+      ],
+      konfigurasiDiagram: [
+        {
+          jenis: JenisDiagram.FLOWCHART,
+          layoutSeed: 9,
+          overridePanah: [
+            {
+              dariLangkahSopId: 'step-old-1',
+              keLangkahSopId: 'step-old-2',
+              cabang: 'YA',
+              sSide: 'right',
+              eSide: 'left',
+              startX: 1,
+              startY: 2,
+              endX: 3,
+              endY: 4,
+              titikTekuk: [{ urutan: 0, x: 2, y: 3 }],
+            },
+          ],
+          overrideLabel: [{ kunciLabel: 'edge-1', posisiX: 11, posisiY: 12 }],
+        },
+      ],
+    };
+    prisma.detailSOP.findUnique.mockResolvedValue(source);
+    prisma.detailSOP.findFirst.mockResolvedValue({ detailSopId: 'detail-1', versi: 1 });
+
+    let stepCounter = 0;
+    const tx = {
+      detailSOP: {
+        create: jest.fn().mockResolvedValue({ detailSopId: 'detail-2' }),
+      },
+      lampiranPeringatan: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      lampiranKualifikasiPelaksanaan: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      lampiranPeralatanPerlengkapan: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      lampiranPencatatanPendataan: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      dasarHukum: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      detailSOPPelaksana: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      sopTerkait: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      langkahSOP: {
+        create: jest.fn().mockImplementation(async () => {
+          stepCounter += 1;
+          return { langkahSopId: `step-new-${stepCounter}` };
+        }),
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+      konfigurasiDiagramSOP: { create: jest.fn().mockResolvedValue(undefined) },
+      overridePanahDiagramSOP: { create: jest.fn().mockResolvedValue(undefined) },
+      titikTekukPanahDiagramSOP: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      overrideLabelDiagramSOP: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      sOP: { update: jest.fn().mockResolvedValue(undefined) },
+      logEditSOP: { create: jest.fn().mockResolvedValue(undefined) },
+    };
+    prisma.$transaction.mockImplementation(async (callback: (arg: any) => Promise<any>) => callback(tx));
+
+    const result = await repository.cloneDetailSopFromSource({
+      sourceDetailSopId: 'detail-1',
+      userId: 'user-1',
     });
 
-    await repo.transitionDetailSopRevisiToSedangDievaluasi({
-      detailSopId: 'det-revisi',
-      userId: 'u-penyusun',
+    expect(result.ok).toBe(true);
+    expect(result.value).toEqual({ detailSopId: 'detail-2', versi: 2 });
+    expect(tx.detailSOP.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sopId: 'sop-1',
+        versi: 2,
+        namaLembaga: 'Biro Organisasi',
+        dibuatOlehId: 'user-1',
+        terakhirDieditOlehId: 'user-1',
+        revisiDariDetailSopId: 'detail-1',
+      }),
     });
-
-    const nilaiUpdate = calls.find((c) => c.table === 'nilaiEvaluasi' && c.op === 'update');
-    expect(nilaiUpdate).toBeDefined();
-    expect(
-      (nilaiUpdate!.args as { data: { statusTindakLanjut: StatusTindakLanjut } }).data
-        .statusTindakLanjut,
-    ).toBe(StatusTindakLanjut.SELESAI);
-
-    const logNilaiCreate = calls.find((c) => c.table === 'logNilaiEvaluasi' && c.op === 'create');
-    expect(logNilaiCreate).toBeDefined();
-    expect(
-      (
-        logNilaiCreate!.args as {
-          data: { statusTindakLanjutSesudah: StatusTindakLanjut; ditindaklanjutiOlehId: string };
-        }
-      ).data,
-    ).toMatchObject({
-      statusTindakLanjutSesudah: StatusTindakLanjut.SELESAI,
-      ditindaklanjutiOlehId: 'u-penyusun',
+    expect(tx.dasarHukum.createMany).toHaveBeenCalledWith({
+      data: [{ detailSopId: 'detail-2', peraturanId: 'peraturan-1' }],
+    });
+    expect(tx.detailSOPPelaksana.createMany).toHaveBeenCalledWith({
+      data: [{ detailSopId: 'detail-2', pelaksanaId: 'pelaksana-1', urutan: 1 }],
+    });
+    expect(tx.langkahSOP.create).toHaveBeenCalledTimes(2);
+    expect(tx.langkahSOP.update).toHaveBeenCalledWith({
+      where: { langkahSopId: 'step-new-1' },
+      data: { langkahSelanjutnyaYaId: 'step-new-2', langkahSelanjutnyaTidakId: null },
+    });
+    expect(tx.konfigurasiDiagramSOP.create).toHaveBeenCalledWith({
+      data: { detailSopId: 'detail-2', jenis: JenisDiagram.FLOWCHART, layoutSeed: 9 },
+    });
+    expect(tx.overridePanahDiagramSOP.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        detailSopId: 'detail-2',
+        dariLangkahSopId: 'step-new-1',
+        keLangkahSopId: 'step-new-2',
+      }),
+    });
+    expect(tx.overrideLabelDiagramSOP.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          detailSopId: 'detail-2',
+          jenis: JenisDiagram.FLOWCHART,
+          kunciLabel: 'edge-1',
+          posisiX: 11,
+          posisiY: 12,
+        },
+      ],
+    });
+    expect(tx.sOP.update).toHaveBeenCalledWith({
+      where: { sopId: 'sop-1' },
+      data: { status: StatusSOP.DRAFT },
     });
   });
 });

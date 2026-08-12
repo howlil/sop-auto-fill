@@ -1,178 +1,83 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useNavigate } from '@tanstack/react-router'
-import { DetailPageLayout } from '@/components/layout/DetailPageLayout'
-import { useAppRole } from '@/hooks/useAppRole'
-import { useToast } from '@/hooks/useToast'
-import { ROUTES } from '@/utils/constants'
-import { useUmpanBalikEvaluasi } from '@/api/evaluasi'
-import { getKirimUlangBlockingReason } from '@/lib/evaluasi/evaluasi-domain'
-import { getKirimUlangRoleBlockingReason } from '@/lib/sop/sop-permissions'
-import {
-  useBuatVersiBaru,
-  useDetailSopPenyusun,
-  useRiwayatVersi,
-} from '@/api/sop'
-import { BuatVersiBaruDialog } from '@/pages/penyusun/sop/components/BuatVersiBaruDialog'
-import {
-  getBuatVersiDariRiwayatBlockingReason,
-  getNextSopVersion,
-  isTerminalVersionStatus,
-} from '@/lib/sop/sop-version-domain'
-import type { SopRiwayatVersiRow } from '@/types/dto/sop.dto'
-import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-header-autosave'
-import type { SopProsedurAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-prosedur-autosave'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from '@tanstack/react-router'
+import { AlertTriangle, ArrowLeft, RefreshCcw } from 'lucide-react'
 import { DetailSOPPenyusunHeader } from './components/DetailSopPenyusunHeader'
 import { DetailSOPPenyusunMain } from './components/DetailSopPenyusunMain'
 import { DetailSOPPenyusunSidePanel } from './components/DetailSopPenyusunSidePanel'
+import { Button } from '@/components/ui/button'
+import { showErrorMessages } from '@/hooks/useToast'
+import { useDetailSopPenyusun } from '@/api/sop'
 import { SopEditorProvider, type SopEditorContextValue } from './SopEditorContext'
+import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-header-autosave'
 
-type CombinedAutosaveStatus = SopHeaderAutosaveStatus
+const AUTOSAVE_RANK: Record<SopHeaderAutosaveStatus, number> = {
+  idle: 0,
+  saved: 1,
+  pending: 2,
+  saving: 3,
+  error: 4,
+}
 
-/**
- * Gabungkan dua status autosave (header + prosedur) menjadi satu indikator UI.
- * Prioritas: error > saving > pending > saved > idle.
- */
 function combineAutosaveStatus(
   header: SopHeaderAutosaveStatus,
-  prosedur: SopProsedurAutosaveStatus,
-): CombinedAutosaveStatus {
-  const order: CombinedAutosaveStatus[] = ['error', 'saving', 'pending', 'saved', 'idle']
-  for (const candidate of order) {
-    if (header === candidate || prosedur === candidate) return candidate
-  }
-  return 'idle'
+  prosedur: SopHeaderAutosaveStatus,
+): SopHeaderAutosaveStatus {
+  return AUTOSAVE_RANK[header] >= AUTOSAVE_RANK[prosedur] ? header : prosedur
 }
 
 export function DetailSOPPenyusun() {
-  const { role } = useAppRole()
-  const { id } = useParams({ from: '/penyusun/sop/$id' })
-  const navigate = useNavigate()
-  const { showToast } = useToast()
+  const params = useParams({ strict: false }) as { workspaceId?: string; sopId?: string; id?: string }
+  const routeWorkspaceId = params.workspaceId
+  const id = params.sopId ?? params.id ?? ''
+  const [activeTab, setActiveTab] = useState<'flowchart' | 'bpmn'>('flowchart')
+  const [isEditingSteps, setIsEditingSteps] = useState(false)
 
+  const editor = useDetailSopPenyusun(id)
   const {
-    metadata,
-    setMetadata: _setMetadata,
-    prosedurRows,
-    setProsedurRows,
-    implementers,
-    setImplementers,
-    activeTab,
-    setActiveTab,
-    isEditingSteps,
-    setIsEditingSteps,
-    isEditPanelCollapsed,
-    setIsEditPanelCollapsed,
-    rightPanelTab,
-    setRightPanelTab,
-    masterPelaksanaOptions,
-    relatedSopOptions,
-    peraturanList,
+    sopDetailId,
+    workspaceId,
+    sopId,
     auditLogs,
+    isLoading,
+    loadError,
     currentSopStatus,
     currentSopStatusLabel,
-    isRevisionFlow,
-    primaryActionLabel,
-    canKirimUlangKeEvaluator,
-    handleMetadataChange,
-    handleComplete,
-    isKirimUlangKeEvaluatorPending,
+    metadata,
+    setMetadata,
+    implementers,
+    setImplementers,
+    prosedurRows,
+    setProsedurRows,
+    masterPelaksanaOptions,
+    peraturanList,
+    relatedSopOptions,
+    isReadOnly,
+    canBuatVersiBaru,
     autosaveStatus,
     autosaveError,
     flushHeaderAutosave,
     prosedurAutosaveStatus,
     prosedurAutosaveError,
     flushProsedurAutosave,
-    canEditDetail,
-  } = useDetailSopPenyusun(id, undefined, undefined)
+    transitionToDone,
+    retryAutosave,
+    handleBuatVersiBaru,
+    isBuatVersiBaruPending,
+    handleMetadataChange,
+  } = editor
 
-  const isReadOnly = !canEditDetail
+  const combinedAutosaveStatus = combineAutosaveStatus(autosaveStatus, prosedurAutosaveStatus)
+  const combinedAutosaveError = autosaveError ?? prosedurAutosaveError
 
   useEffect(() => {
-    if (isReadOnly) {
-      setIsEditingSteps(false)
+    if (combinedAutosaveError) {
+      showErrorMessages(combinedAutosaveError, 'Gagal menyimpan perubahan otomatis')
     }
-  }, [isReadOnly, setIsEditingSteps])
-  /* `setMetadata` perlu di-cast karena hook mengembalikan dispatcher yang sama persis
-     bentuknya dengan tipe context — alias ini hanya untuk memenuhi naming convention. */
-  const setMetadata = _setMetadata
+  }, [combinedAutosaveError])
 
-  const { data: umpanBalik, isLoading: isUmpanBalikLoading } = useUmpanBalikEvaluasi(
-    id,
-    Boolean(id),
-  )
-  const kirimUlangBlockingReason = isRevisionFlow
-    ? getKirimUlangBlockingReason(umpanBalik ?? null) ??
-      getKirimUlangRoleBlockingReason(role)
-    : null
-
-  const sopHeaderId = metadata.sopId
-  const { data: riwayatVersi = [] } = useRiwayatVersi(sopHeaderId)
-  const { mutateAsync: buatVersiBaru, isPending: isBuatVersiBaruPending } = useBuatVersiBaru()
-  const [buatVersiSource, setBuatVersiSource] = useState<SopRiwayatVersiRow | null>(null)
-  const currentVersionSource = riwayatVersi.find((row) => row.detailSopId === id)
-  const nextVersion = getNextSopVersion(riwayatVersi)
-  const buatVersiBaruBlockingReason = getBuatVersiDariRiwayatBlockingReason(currentVersionSource)
-  const canBuatVersiBaru = buatVersiBaruBlockingReason === null
-  const terminalSource = riwayatVersi.find((row) => isTerminalVersionStatus(row.status))
-  const historyBuatVersiBlockingReason = getBuatVersiDariRiwayatBlockingReason(terminalSource)
-
-  /* Toast error autosave sekali per error reference (hindari spam saat re-render). */
-  const lastHeaderErrorRef = useRef<Error | null>(null)
-  useEffect(() => {
-    if (isReadOnly) return
-    if (autosaveError && autosaveError !== lastHeaderErrorRef.current) {
-      lastHeaderErrorRef.current = autosaveError
-      showToast(`Gagal autosave header SOP: ${autosaveError.message}`, 'error')
-    }
-    if (autosaveError === null) {
-      lastHeaderErrorRef.current = null
-    }
-  }, [autosaveError, showToast, isReadOnly])
-
-  const lastProsedurErrorRef = useRef<Error | null>(null)
-  useEffect(() => {
-    if (isReadOnly) return
-    if (prosedurAutosaveError && prosedurAutosaveError !== lastProsedurErrorRef.current) {
-      lastProsedurErrorRef.current = prosedurAutosaveError
-      showToast(
-        `Gagal autosave langkah/aktor pelaksana: ${prosedurAutosaveError.message}`,
-        'error',
-      )
-    }
-    if (prosedurAutosaveError === null) {
-      lastProsedurErrorRef.current = null
-    }
-  }, [prosedurAutosaveError, showToast, isReadOnly])
-
-  /* Best-effort flush sebelum tab disembunyikan / ditutup / refresh. */
-  useEffect(() => {
-    if (isReadOnly) return
-    const flushBothFireAndForget = (): void => {
-      void flushHeaderAutosave()
-      void flushProsedurAutosave()
-    }
-    const flushBothAwaited = (): void => {
-      void Promise.all([flushHeaderAutosave(), flushProsedurAutosave()])
-    }
-    const onVisibilityChange = (): void => {
-      if (document.visibilityState === 'hidden') {
-        flushBothAwaited()
-      }
-    }
-    window.addEventListener('beforeunload', flushBothFireAndForget)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('pagehide', flushBothAwaited)
-    return () => {
-      window.removeEventListener('beforeunload', flushBothFireAndForget)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('pagehide', flushBothAwaited)
-      flushBothAwaited()
-    }
-  }, [flushHeaderAutosave, flushProsedurAutosave, isReadOnly])
-
-  const editorContextValue = useMemo<SopEditorContextValue>(
+  const contextValue = useMemo<SopEditorContextValue>(
     () => ({
-      sopDetailId: id,
+      sopDetailId,
       metadata,
       setMetadata,
       handleMetadataChange,
@@ -192,7 +97,7 @@ export function DetailSOPPenyusun() {
       isReadOnly,
     }),
     [
-      id,
+      sopDetailId,
       metadata,
       setMetadata,
       handleMetadataChange,
@@ -213,98 +118,77 @@ export function DetailSOPPenyusun() {
     ],
   )
 
-  /* Status gabungan header + prosedur untuk satu indikator autosave di header.
-     Prioritas: error > saving > pending > saved > idle. */
-  const combinedAutosaveStatus = useMemo(() => combineAutosaveStatus(autosaveStatus, prosedurAutosaveStatus), [
-    autosaveStatus,
-    prosedurAutosaveStatus,
-  ])
-  const combinedFlushAutosave = useCallback(async () => {
-    await Promise.all([flushHeaderAutosave(), flushProsedurAutosave()])
-  }, [flushHeaderAutosave, flushProsedurAutosave])
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface-subtle p-6">
+        <div className="max-w-lg rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+          <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-red-600" />
+          <h2 className="text-lg font-semibold text-red-900">SOP tidak dapat dimuat</h2>
+          <p className="mt-2 text-sm text-red-800">{loadError.message}</p>
+          <Button className="mt-4" onClick={() => window.location.reload()}>
+            <RefreshCcw className="mr-2 h-4 w-4" /> Muat ulang
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface-subtle">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  const resolvedWorkspaceId = workspaceId ?? routeWorkspaceId ?? ''
+  const backHref = resolvedWorkspaceId ? `/workspaces/${resolvedWorkspaceId}` : '/workspaces'
 
   return (
-    <SopEditorProvider value={editorContextValue}>
-      <DetailPageLayout
-        breadcrumb={[
-          { label: 'Manajemen SOP', to: ROUTES.PENYUSUN.SOP },
-          { label: isReadOnly ? 'Lihat SOP' : 'Edit SOP' },
-        ]}
-        title={isReadOnly ? 'Lihat Dokumen SOP' : 'Edit Dokumen SOP'}
-        description={metadata.nama ?? metadata.judul ?? ''}
-        backTo={ROUTES.PENYUSUN.SOP}
-        backSize="icon"
-        header={
-          <DetailSOPPenyusunHeader
-            metadata={metadata}
-            currentSopStatus={currentSopStatus}
-            currentSopStatusLabel={currentSopStatusLabel}
-            isRevisionFlow={isRevisionFlow}
-            primaryActionLabel={primaryActionLabel}
-            canShowKirimUlangAction={!isRevisionFlow || canKirimUlangKeEvaluator}
-            autosaveStatus={combinedAutosaveStatus}
-            onRetryAutosave={combinedFlushAutosave}
-            onComplete={() => handleComplete(id, role ?? null, navigate)}
-            isReadOnly={isReadOnly}
-            isPrimaryActionPending={isKirimUlangKeEvaluatorPending}
-            kirimUlangBlockingReason={kirimUlangBlockingReason}
-            canBuatVersiBaru={canBuatVersiBaru}
-            buatVersiBaruBlockingReason={
-              currentSopStatus === 'BERLAKU' ? buatVersiBaruBlockingReason : null
-            }
-            onBuatVersiBaru={() => {
-              if (currentVersionSource) setBuatVersiSource(currentVersionSource)
-            }}
-            isBuatVersiBaruPending={isBuatVersiBaruPending}
-          />
-        }
-        main={
+    <SopEditorProvider value={contextValue}>
+      <main className="flex min-h-screen flex-col bg-surface-subtle">
+        <header className="shrink-0 border-b border-border bg-background px-4 py-3">
+          <div className="mx-auto flex max-w-[1800px] items-start gap-3">
+            <a href={backHref} className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted">
+              <ArrowLeft className="h-4 w-4" />
+            </a>
+            <div className="min-w-0 flex-1">
+              <DetailSOPPenyusunHeader
+                metadata={metadata}
+                currentSopStatus={currentSopStatus}
+                currentSopStatusLabel={currentSopStatusLabel}
+                autosaveStatus={combinedAutosaveStatus}
+                onRetryAutosave={retryAutosave}
+                onComplete={() => void transitionToDone()}
+                isReadOnly={isReadOnly}
+                canBuatVersiBaru={canBuatVersiBaru}
+                onBuatVersiBaru={() => void handleBuatVersiBaru()}
+                isBuatVersiBaruPending={isBuatVersiBaruPending}
+              />
+            </div>
+          </div>
+        </header>
+
+        <div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 gap-0 overflow-hidden">
           <DetailSOPPenyusunMain
             activeTab={activeTab}
             onActiveTabChange={setActiveTab}
             isEditingSteps={isEditingSteps}
             setIsEditingSteps={setIsEditingSteps}
           />
-        }
-        rightPanel={
-          <DetailSOPPenyusunSidePanel
-            collapsed={isEditPanelCollapsed}
-            onCollapsedChange={setIsEditPanelCollapsed}
-            rightPanelTab={rightPanelTab}
-            onTabChange={setRightPanelTab}
-            auditEntries={auditLogs ?? []}
-            editTabLabel={isReadOnly ? 'Informasi' : 'Edit'}
-            umpanBalik={umpanBalik ?? null}
-            isUmpanBalikLoading={isUmpanBalikLoading}
-            isReadOnly={isReadOnly}
-            detailSopId={id}
-            sopId={sopHeaderId}
-            onBuatVersiBaru={setBuatVersiSource}
-            isBuatVersiBaruPending={isBuatVersiBaruPending}
-            buatVersiBaruBlockingReason={historyBuatVersiBlockingReason}
-          />
-        }
-      />
-      <BuatVersiBaruDialog
-        open={buatVersiSource !== null}
-        onOpenChange={(open) => {
-          if (!open) setBuatVersiSource(null)
-        }}
-        judulSop={metadata.nama ?? metadata.judul ?? 'SOP'}
-        versiSumber={buatVersiSource?.versi ?? 0}
-        statusSumber={buatVersiSource?.statusLabel ?? ''}
-        versiBaru={nextVersion}
-        isPending={isBuatVersiBaruPending}
-        onConfirm={async () => {
-          if (buatVersiSource === null) return
-          const workbench = await buatVersiBaru(buatVersiSource.detailSopId)
-          setBuatVersiSource(null)
-          void navigate({
-            to: ROUTES.PENYUSUN.DETAIL_SOP,
-            params: { id: workbench.detail.id },
-          })
-        }}
-      />
+          {resolvedWorkspaceId && sopId ? (
+            <DetailSOPPenyusunSidePanel
+              workspaceId={resolvedWorkspaceId}
+              detailSopId={sopDetailId}
+              sopId={sopId}
+              auditEntries={auditLogs}
+              isReadOnly={isReadOnly}
+              onBuatVersiBaru={() => void handleBuatVersiBaru()}
+              isBuatVersiBaruPending={isBuatVersiBaruPending}
+            />
+          ) : null}
+        </div>
+      </main>
     </SopEditorProvider>
   )
 }

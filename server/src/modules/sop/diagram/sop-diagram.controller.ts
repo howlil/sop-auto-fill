@@ -8,20 +8,11 @@ import {
   Patch,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBadRequestResponse,
-  ApiCookieAuth,
-  ApiForbiddenResponse,
-  ApiNotFoundResponse,
-  ApiOperation,
-  ApiQuery,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { type ApiSuccessResponse, Roles, UseJwtAndRolesGuards } from '../../../common';
-import { PeranPengguna } from '../../../generated/prisma';
+import { JwtAuthGuard, type ApiSuccessResponse } from '../../../common';
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   type JwtAccessPayload,
@@ -32,37 +23,29 @@ import { SopDiagramService } from './sop-diagram.service';
 
 @ApiTags('SOP')
 @Controller('sop/diagram')
-@UseJwtAndRolesGuards()
+@UseGuards(JwtAuthGuard)
+@ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
 export class SopDiagramController {
   constructor(private readonly sopDiagramService: SopDiagramService) {}
 
   @Patch(':detailSopId')
-  @Roles(PeranPengguna.PENYUSUN, PeranPengguna.PJ_PENYUSUN)
-  @ApiCookieAuth(ACCESS_TOKEN_COOKIE_NAME)
-  @ApiOperation({
-    summary:
-      'PATCH konfigurasi diagram SOP (layoutSeed + path manual). Param :detailSopId boleh DetailSOP atau SOP header.',
-  })
-  @ApiQuery({
-    name: 'logsLimit',
-    required: false,
-    schema: { default: 100, minimum: 1, maximum: 500 },
-  })
+  @ApiOperation({ summary: 'Simpan konfigurasi Flowchart/BPMN dan path override manual' })
   @ApiResponse({ status: 200, type: PenyusunWorkbenchDataDto })
-  @ApiBadRequestResponse()
-  @ApiForbiddenResponse()
-  @ApiNotFoundResponse()
   async updateDiagram(
     @Req() req: Request & { user: JwtAccessPayload },
     @Param('detailSopId', ParseUUIDPipe) detailSopId: string,
     @Body() dto: UpdateSopDiagramDto,
     @Query('logsLimit', new DefaultValuePipe(100), ParseIntPipe) logsLimit: number,
   ): Promise<ApiSuccessResponse<PenyusunWorkbenchDataDto>> {
-    const data = await this.sopDiagramService.updateDiagram(req.user, detailSopId, dto, logsLimit);
     return {
       message: 'Konfigurasi diagram berhasil diperbarui',
       success: true,
-      data,
+      data: await this.sopDiagramService.updateDiagram(
+        req.user,
+        detailSopId,
+        dto,
+        logsLimit,
+      ),
     };
   }
 }

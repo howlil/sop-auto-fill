@@ -1,11 +1,7 @@
-import type { PrismaService } from '../../../common/prisma/prisma.service';
 import { PelaksanaRepository } from './pelaksana.repository';
 
-describe('Pengujian PelaksanaRepository', () => {
-  const prismaMock = {
-    pengguna: {
-      findFirst: jest.fn(),
-    },
+function makeRepository() {
+  const prisma = {
     pelaksana: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -13,101 +9,62 @@ describe('Pengujian PelaksanaRepository', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
-    langkahSOP: {
-      count: jest.fn(),
-    },
-    detailSOPPelaksana: {
-      count: jest.fn(),
-    },
+    langkahSOP: { count: jest.fn() },
+    detailSOPPelaksana: { count: jest.fn() },
   };
-  let repo: PelaksanaRepository;
+  return { repository: new PelaksanaRepository(prisma as any), prisma };
+}
 
-  const selectPelaksana = {
-    pelaksanaId: true,
-    opdId: true,
-    nama: true,
-    createdAt: true,
-    updatedAt: true,
-  };
+describe('PelaksanaRepository workspace model', () => {
+  it('mengambil pelaksana hanya dari workspace yang diminta', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.pelaksana.findMany.mockResolvedValue([]);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    repo = new PelaksanaRepository(prismaMock as unknown as PrismaService);
-  });
+    await repository.findManyByWorkspaceId('workspace-1');
 
-  it('seharusnya mencari OPD pengguna aktif berdasarkan id pengguna', async () => {
-    prismaMock.pengguna.findFirst.mockResolvedValueOnce({ opdId: 'opd-1' });
-
-    const actual = await repo.findOpdIdByPenggunaId('user-1');
-
-    expect(prismaMock.pengguna.findFirst).toHaveBeenCalledWith({
-      where: { penggunaId: 'user-1', deletedAt: null },
-      select: { opdId: true },
-    });
-    expect(actual).toBe('opd-1');
-  });
-
-  it('seharusnya mengembalikan null ketika pengguna aktif tidak ditemukan', async () => {
-    prismaMock.pengguna.findFirst.mockResolvedValueOnce(null);
-
-    await expect(repo.findOpdIdByPenggunaId('missing')).resolves.toBeNull();
-  });
-
-  it('seharusnya mencari daftar pelaksana per OPD berurutan nama', async () => {
-    await repo.findManyByOpdId('opd-1');
-
-    expect(prismaMock.pelaksana.findMany).toHaveBeenCalledWith({
-      where: { opdId: 'opd-1' },
-      select: selectPelaksana,
+    expect(prisma.pelaksana.findMany).toHaveBeenCalledWith({
+      where: { workspaceId: 'workspace-1' },
       orderBy: { nama: 'asc' },
     });
   });
 
-  it('seharusnya mencari pelaksana berdasarkan id dan OPD', async () => {
-    await repo.findByIdAndOpd('pl-1', 'opd-1');
+  it('memverifikasi ownership melalui relasi workspace', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.pelaksana.findFirst.mockResolvedValue(null);
 
-    expect(prismaMock.pelaksana.findFirst).toHaveBeenCalledWith({
-      where: { pelaksanaId: 'pl-1', opdId: 'opd-1' },
-      select: selectPelaksana,
+    await repository.findOwnedByUser('pelaksana-1', 'user-1');
+
+    expect(prisma.pelaksana.findFirst).toHaveBeenCalledWith({
+      where: {
+        pelaksanaId: 'pelaksana-1',
+        workspace: { ownerId: 'user-1' },
+      },
     });
   });
 
-  it('seharusnya membuat pelaksana dengan opdId dan nama', async () => {
-    await repo.create('opd-1', 'Staf A');
+  it('membuat pelaksana dengan workspaceId', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.pelaksana.create.mockResolvedValue({});
 
-    expect(prismaMock.pelaksana.create).toHaveBeenCalledWith({
-      data: { opdId: 'opd-1', nama: 'Staf A' },
-      select: selectPelaksana,
+    await repository.create('workspace-1', 'Staf Administrasi');
+
+    expect(prisma.pelaksana.create).toHaveBeenCalledWith({
+      data: { workspaceId: 'workspace-1', nama: 'Staf Administrasi' },
     });
   });
 
-  it('seharusnya memperbarui nama pelaksana berdasarkan id', async () => {
-    await repo.updateNama('pl-1', 'Staf B');
+  it('menghitung referensi langkah dan swimlane sebelum penghapusan', async () => {
+    const { repository, prisma } = makeRepository();
+    prisma.langkahSOP.count.mockResolvedValue(2);
+    prisma.detailSOPPelaksana.count.mockResolvedValue(1);
 
-    expect(prismaMock.pelaksana.update).toHaveBeenCalledWith({
-      where: { pelaksanaId: 'pl-1' },
-      data: { nama: 'Staf B' },
-      select: selectPelaksana,
+    await expect(repository.countLangkahReferences('pelaksana-1')).resolves.toBe(2);
+    await expect(repository.countSwimlaneReferences('pelaksana-1')).resolves.toBe(1);
+    expect(prisma.langkahSOP.count).toHaveBeenCalledWith({
+      where: { pelaksanaId: 'pelaksana-1' },
     });
-  });
-
-  it('seharusnya menghapus pelaksana berdasarkan id', async () => {
-    await repo.delete('pl-1');
-
-    expect(prismaMock.pelaksana.delete).toHaveBeenCalledWith({
-      where: { pelaksanaId: 'pl-1' },
-    });
-  });
-
-  it('seharusnya menghitung referensi pelaksana pada langkah dan swimlane', async () => {
-    prismaMock.langkahSOP.count.mockResolvedValueOnce(2);
-    prismaMock.detailSOPPelaksana.count.mockResolvedValueOnce(3);
-
-    await expect(repo.countLangkahReferences('pl-1')).resolves.toBe(2);
-    await expect(repo.countSwimlaneReferences('pl-1')).resolves.toBe(3);
-    expect(prismaMock.langkahSOP.count).toHaveBeenCalledWith({ where: { pelaksanaId: 'pl-1' } });
-    expect(prismaMock.detailSOPPelaksana.count).toHaveBeenCalledWith({
-      where: { pelaksanaId: 'pl-1' },
+    expect(prisma.detailSOPPelaksana.count).toHaveBeenCalledWith({
+      where: { pelaksanaId: 'pelaksana-1' },
     });
   });
 });

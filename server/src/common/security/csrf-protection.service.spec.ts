@@ -15,7 +15,7 @@ function request(
 ): Pick<Request, 'method' | 'path' | 'headers' | 'cookies'> {
   return {
     method: 'POST',
-    path: '/api/v1/auth/login',
+    path: '/api/v1/auth/google',
     headers: {
       origin: 'https://sop.example.test',
       'sec-fetch-site': 'same-origin',
@@ -36,7 +36,7 @@ describe('CsrfProtectionService', () => {
     ).not.toThrow();
   });
 
-  it('menerima login production dari origin resmi dengan custom header', () => {
+  it('menerima login Google production dari origin resmi dengan custom header', () => {
     const service = new CsrfProtectionService(
       config({ NODE_ENV: 'production', PUBLIC_APP_ORIGIN: 'https://sop.example.test' }),
     );
@@ -50,7 +50,7 @@ describe('CsrfProtectionService', () => {
     expect(() =>
       service.assertRequest(
         request({
-          path: '/api/v1/tte/profil/pin',
+          path: '/api/v1/workspaces',
           headers: {
             origin: 'https://evil.example',
             'sec-fetch-site': 'cross-site',
@@ -95,14 +95,14 @@ describe('CsrfProtectionService', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('melewatkan public POST tanpa cookie karena bukan CSRF target', () => {
+  it('melewatkan non-auth POST tanpa cookie karena bukan target CSRF', () => {
     const service = new CsrfProtectionService(
       config({ NODE_ENV: 'production', PUBLIC_APP_ORIGIN: 'https://sop.example.test' }),
     );
     expect(() =>
       service.assertRequest(
         request({
-          path: '/api/v1/tte/public/pdf/verify',
+          path: '/api/v1/workspaces',
           headers: {},
           cookies: {},
         }),

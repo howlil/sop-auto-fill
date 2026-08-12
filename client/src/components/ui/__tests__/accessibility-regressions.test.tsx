@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Eye } from 'lucide-react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { EvaluasiWorkflowStepper } from '@/components/evaluasi/evaluasi-workflow-stepper'
 import { SopStatusBadge } from '@/components/status/sop-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,7 +29,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { SkorRatingPicker } from '@/pages/evaluator/evaluasi/components/SkorRatingPicker'
 
 describe('regresi aksesibilitas komponen UI', () => {
   it('menggunakan warna primer yang kontras untuk tombol utama', () => {
@@ -77,20 +75,14 @@ describe('regresi aksesibilitas komponen UI', () => {
   })
 
   it('menjaga status panjang tetap satu baris dengan bentuk pill dan warna kontras', () => {
-    render(
-      <SopStatusBadge
-        status="DIVERIFIKASI_PJ_EVALUATOR_ORGANISASI"
-        label="Menunggu pengesahan Kepala OPD"
-        showDomain={false}
-      />,
-    )
+    render(<SopStatusBadge status="COMPLETED" label="SOP selesai" showDomain={false} />)
 
-    const status = screen.getByText('Menunggu pengesahan Kepala OPD')
+    const status = screen.getByText('SOP selesai')
     expect(status).toHaveClass(
       'whitespace-nowrap',
       'rounded-full',
-      'bg-violet-100',
-      'text-violet-800',
+      'bg-emerald-100',
+      'text-emerald-800',
     )
     expect(status.parentElement).toHaveClass('flex-nowrap', 'whitespace-nowrap')
   })
@@ -108,7 +100,7 @@ describe('regresi aksesibilitas komponen UI', () => {
 
   it('memberi affordance scroll dan header sticky pada tabel data', () => {
     render(
-      <DataTableRoot aria-label="Daftar pengguna">
+      <DataTableRoot aria-label="Daftar SOP">
         <DataTableTable>
           <thead>
             <DataTableHeaderRow>
@@ -119,10 +111,10 @@ describe('regresi aksesibilitas komponen UI', () => {
       </DataTableRoot>,
     )
 
-    expect(screen.getByRole('region', { name: 'Daftar pengguna' })).toHaveClass(
+    expect(screen.getByRole('region', { name: 'Daftar SOP' })).toHaveClass(
       'overscroll-x-contain',
     )
-    expect(screen.getByRole('region', { name: 'Daftar pengguna' })).not.toHaveClass(
+    expect(screen.getByRole('region', { name: 'Daftar SOP' })).not.toHaveClass(
       '[scrollbar-gutter:stable]',
     )
     expect(screen.getByRole('row')).toHaveClass('sticky', 'top-0')
@@ -132,9 +124,6 @@ describe('regresi aksesibilitas komponen UI', () => {
       'text-right',
       'font-medium',
       'py-2',
-    )
-    expect(screen.getByRole('columnheader', { name: 'Jumlah' })).not.toHaveClass(
-      'font-semibold',
     )
   })
 
@@ -237,32 +226,32 @@ describe('regresi aksesibilitas komponen UI', () => {
     const onChange = vi.fn()
     render(
       <OptionCardPicker
-        label="Hasil evaluasi"
+        label="Status SOP"
         options={[
-          { value: 'sesuai', label: 'Sesuai' },
-          { value: 'perbaikan', label: 'Perlu perbaikan' },
+          { value: 'draft', label: 'Draft' },
+          { value: 'completed', label: 'Selesai' },
         ]}
-        value="sesuai"
+        value="draft"
         onChange={onChange}
       />,
     )
 
-    expect(screen.getByRole('radiogroup', { name: 'Hasil evaluasi' })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Sesuai' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radiogroup', { name: 'Status SOP' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Draft' })).toHaveAttribute('aria-checked', 'true')
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Perlu perbaikan' }))
-    expect(onChange).toHaveBeenCalledWith('perbaikan')
+    fireEvent.click(screen.getByRole('radio', { name: 'Selesai' }))
+    expect(onChange).toHaveBeenCalledWith('completed')
   })
 
   it('memindahkan pilihan radio kartu dengan tombol panah', () => {
     function PickerHarness() {
-      const [value, setValue] = useState('sesuai')
+      const [value, setValue] = useState('draft')
       return (
         <OptionCardPicker
-          label="Hasil evaluasi"
+          label="Status SOP"
           options={[
-            { value: 'sesuai', label: 'Sesuai' },
-            { value: 'perbaikan', label: 'Perlu perbaikan' },
+            { value: 'draft', label: 'Draft' },
+            { value: 'completed', label: 'Selesai' },
           ]}
           value={value}
           onChange={setValue}
@@ -271,8 +260,8 @@ describe('regresi aksesibilitas komponen UI', () => {
     }
 
     render(<PickerHarness />)
-    const first = screen.getByRole('radio', { name: 'Sesuai' })
-    const second = screen.getByRole('radio', { name: 'Perlu perbaikan' })
+    const first = screen.getByRole('radio', { name: 'Draft' })
+    const second = screen.getByRole('radio', { name: 'Selesai' })
 
     first.focus()
     fireEvent.keyDown(first, { key: 'ArrowRight' })
@@ -280,21 +269,6 @@ describe('regresi aksesibilitas komponen UI', () => {
     expect(second).toHaveFocus()
     expect(second).toHaveAttribute('aria-checked', 'true')
     expect(second).toHaveAttribute('tabindex', '0')
-  })
-
-  it('mengumumkan skor yang sedang dipilih', () => {
-    render(<SkorRatingPicker value={3} onChange={vi.fn()} />)
-
-    expect(screen.getByRole('radio', { name: '3 - Sedang' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    )
-  })
-
-  it('menandai tahap workflow yang sedang aktif', () => {
-    render(<EvaluasiWorkflowStepper status="SEDANG_DIEVALUASI" />)
-
-    expect(screen.getByRole('listitem', { current: 'step' })).toBeInTheDocument()
   })
 
   it('menandai halaman pagination yang sedang aktif', () => {
