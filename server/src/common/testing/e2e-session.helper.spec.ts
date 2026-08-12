@@ -1,6 +1,7 @@
 import { JwtService } from '@nestjs/jwt';
 import {
   E2E_IDENTITY,
+  assertDisposableE2eDatabase,
   assertE2eEnvironment,
   issueE2eAccessToken,
 } from './e2e-session.helper';
@@ -16,6 +17,24 @@ describe('E2E session helper', () => {
     expect(() =>
       assertE2eEnvironment({ NODE_ENV: 'production', E2E_TEST: '1' }),
     ).toThrow('production');
+  });
+
+  it('rejects a database name that is not explicitly test/e2e', () => {
+    expect(() =>
+      assertDisposableE2eDatabase({ host: '127.0.0.1', database: 'sop_app' }),
+    ).toThrow('database');
+  });
+
+  it('rejects a remote database host', () => {
+    expect(() =>
+      assertDisposableE2eDatabase({ host: 'db.internal.example', database: 'sop_e2e' }),
+    ).toThrow('localhost');
+  });
+
+  it('accepts a local disposable E2E database', () => {
+    expect(() =>
+      assertDisposableE2eDatabase({ host: '127.0.0.1', database: 'sop_e2e' }),
+    ).not.toThrow();
   });
 
   it('issues a JWT accepted with the configured test secret and current auth payload', async () => {
