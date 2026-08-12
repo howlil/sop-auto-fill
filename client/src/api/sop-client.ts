@@ -18,7 +18,11 @@ async function unwrap<T>(promise: Promise<ApiSuccessResponse<T>>): Promise<T> {
 
 export const sopApi = {
   findAll: (params?: SopListQueryParams) =>
-    unwrap(apiClient.get<ApiSuccessResponse<SopDaftarRow[]>>(`/sop${buildQueryString(params)}`)),
+    unwrap(
+      apiClient.get<ApiSuccessResponse<SopDaftarRow[]>>(
+        `/sop${buildQueryString(params as Record<string, unknown> | undefined)}`,
+      ),
+    ),
 
   create: (payload: CreateSopRequestDto) =>
     unwrap(apiClient.post<ApiSuccessResponse<SopDaftarRow>>('/sop', payload)),
