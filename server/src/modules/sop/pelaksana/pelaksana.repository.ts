@@ -20,9 +20,12 @@ export class PelaksanaRepository {
     });
   }
 
-  findByIdAndWorkspace(pelaksanaId: string, workspaceId: string): Promise<PelaksanaRow | null> {
+  findOwnedByUser(pelaksanaId: string, ownerId: string): Promise<PelaksanaRow | null> {
     return this.prisma.pelaksana.findFirst({
-      where: { pelaksanaId, workspaceId },
+      where: {
+        pelaksanaId,
+        workspace: { ownerId },
+      },
     });
   }
 
