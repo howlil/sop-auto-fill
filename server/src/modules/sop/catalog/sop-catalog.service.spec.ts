@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { JwtAccessPayload } from '../../../common';
 import { StatusSOP } from '../../../generated/prisma';
 import { SopCatalogService } from './sop-catalog.service';
@@ -100,5 +100,44 @@ describe('SopCatalogService workspace model', () => {
     await expect(service.getPenyusunWorkbench(user, 'detail-1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('hanya membuat versi baru dari SOP COMPLETED dan memuat draft hasil clone', async () => {
+    const { service, repo } = makeService();
+    repo.findProjectContext.mockResolvedValue({
+      detailSopId: 'detail-1',
+      sopId: 'sop-1',
+      ownerId: 'user-1',
+      status: StatusSOP.COMPLETED,
+    });
+    repo.cloneDetailSopFromSource.mockResolvedValue({
+      ok: true,
+      data: { detailSopId: 'detail-2', versi: 2 },
+      value: { detailSopId: 'detail-2', versi: 2 },
+    });
+    const clonedWorkbench = { detail: { id: 'detail-2', versi: 2 } } as any;
+    jest.spyOn(service, 'getPenyusunWorkbench').mockResolvedValue(clonedWorkbench);
+
+    await expect(service.buatVersiBaru(user, 'detail-1')).resolves.toBe(clonedWorkbench);
+    expect(repo.cloneDetailSopFromSource).toHaveBeenCalledWith({
+      sourceDetailSopId: 'detail-1',
+      userId: 'user-1',
+    });
+    expect(service.getPenyusunWorkbench).toHaveBeenCalledWith(user, 'detail-2', undefined);
+  });
+
+  it('menolak pembuatan versi baru ketika SOP belum COMPLETED', async () => {
+    const { service, repo } = makeService();
+    repo.findProjectContext.mockResolvedValue({
+      detailSopId: 'detail-1',
+      sopId: 'sop-1',
+      ownerId: 'user-1',
+      status: StatusSOP.DRAFT,
+    });
+
+    await expect(service.buatVersiBaru(user, 'detail-1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(repo.cloneDetailSopFromSource).not.toHaveBeenCalled();
   });
 });
