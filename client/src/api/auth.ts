@@ -1,131 +1,62 @@
+import { useMutation } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { queryClient } from "@/config/query-client";
+import { useToast, showErrorMessages } from "@/hooks/useToast";
 import { apiClient } from "@/lib/api/api-client";
+import {
+  mapPublicDataToAuthUser,
+  useAuthStore,
+} from "@/stores/authStore";
 import type {
-  ApiSuccessResponse,
-  ChangePasswordDto,
-  LoginApiResponse,
-  LoginRequestDto,
-  UpdateMyPhoneDto,
+  AuthApiResponse,
+  GoogleLoginRequestDto,
 } from "@/types/dto/auth.dto";
 
 export const authApi = {
-  login: (payload: LoginRequestDto) =>
-    apiClient.post<LoginApiResponse>("/auth/login", {
-      email: payload.email,
-      password: payload.kataSandi,
-    }),
-
-  /** Profil sesi saat ini — memakai cookie HttpOnly; untuk bootstrap setelah refresh. */
-  me: () => apiClient.get<LoginApiResponse>("/auth/me"),
-
-  /** Memperbarui nomor HP milik pengguna yang sedang login. */
-  updateMyPhone: (payload: UpdateMyPhoneDto) =>
-    apiClient.patch<LoginApiResponse>("/auth/me/nohp", payload),
-
-  /**
-   * AUTH-02: Refresh access token
-   * New tokens are set via HttpOnly cookies automatically.
-   * Returns { success: true } on success.
-   */
-  refresh: () =>
-    apiClient.post<{ message: string; success: boolean; data: { success: true } }>("/auth/refresh"),
-
-  /**
-   * AUTH-06: Change password for logged-in user
-   */
-  changePassword: (payload: ChangePasswordDto) =>
-    apiClient.patch<ApiSuccessResponse<{ success: true }>>("/auth/change-password", payload),
-
-  /**
-   * Logout - calls server to clear HttpOnly cookies
-   */
+  loginWithGoogle: (payload: GoogleLoginRequestDto) =>
+    apiClient.post<AuthApiResponse>("/auth/google", payload),
+  me: () => apiClient.get<AuthApiResponse>("/auth/me"),
   logout: async () => {
     try {
       await apiClient.post<{ message: string }>("/auth/logout");
     } catch {
-      // Continue with local cleanup even if server call fails
+      // Local session cleanup must still happen when network logout fails.
     }
-    // Note: Token cleanup is handled by backend (HttpOnly cookies)
   },
 };
-
-import { useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/config/query-client";
-import { useAuthStore, ensureAuthHydrated, mapPublicDataToAuthUser } from "@/stores/authStore";
-import { useToast, showErrorMessages } from "@/hooks/useToast";
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import { navigateToAppPath, resolvePostLoginPath } from "@/utils/role-routing";
 
 export function useAuth() {
   const navigate = useNavigate();
   const { redirect } = useSearch({ strict: false }) as { redirect?: string };
   const { showToast } = useToast();
-  // Use selectors with shallow comparison for optimal performance
   const setUser = useAuthStore((state) => state.setUser);
-  const logout = useAuthStore((state) => state.logout);
+  const clearUser = useAuthStore((state) => state.logout);
 
   const loginMutation = useMutation({
-    mutationFn: (payload: LoginRequestDto) => authApi.login(payload),
+    mutationFn: (credential: string) => authApi.loginWithGoogle({ credential }),
     onSuccess: async (response) => {
-      const u = response.data;
       queryClient.clear();
-      setUser(mapPublicDataToAuthUser(u));
-
-      showToast(`Selamat datang, ${u.nama}!`, "success");
-
-      try {
-        await ensureAuthHydrated(1000);
-        navigateToAppPath(navigate, resolvePostLoginPath(redirect, u.peran));
-      } catch {
-        setTimeout(() => {
-          navigateToAppPath(navigate, resolvePostLoginPath(redirect, u.peran));
-        }, 100);
-      }
-    },
-    onError: (error: Error) => {
-      showErrorMessages(error, "Login gagal");
-    },
-  });
-
-  const changePasswordMutation = useMutation({
-    mutationFn: (payload: ChangePasswordDto) => authApi.changePassword(payload),
-    onSuccess: () => showToast("Kata sandi berhasil diubah", "success"),
-    onError: (error: Error) => {
-      showErrorMessages(error, "Gagal mengubah kata sandi");
-    },
-  });
-
-  const updateMyPhoneMutation = useMutation({
-    mutationFn: (payload: UpdateMyPhoneDto) => authApi.updateMyPhone(payload),
-    onSuccess: (response) => {
       setUser(mapPublicDataToAuthUser(response.data));
-      showToast("Nomor HP berhasil diperbarui", "success");
+      showToast(`Selamat datang, ${response.data.name}!`, "success");
+      const destination =
+        typeof redirect === "string" && redirect.startsWith("/")
+          ? redirect
+          : "/workspaces";
+      await navigate({ to: destination });
     },
-    onError: (error: Error) => {
-      showErrorMessages(error, "Gagal memperbarui nomor HP");
-    },
+    onError: (error: Error) => showErrorMessages(error, "Login Google gagal"),
   });
 
-  /**
-   * Keluar: POST `/auth/logout` (hapus cookie HttpOnly) → kosongkan store → hapus cache React Query.
-   * Navigasi ke beranda/login dilakukan pemanggil (mis. HeaderBar).
-   */
-  const logoutHandler = async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      // Lanjut bersihkan klien walau server gagal
-    }
-    logout();
+  const logout = async () => {
+    await authApi.logout();
+    clearUser();
     queryClient.clear();
+    await navigate({ to: "/login" });
   };
 
   return {
-    login: loginMutation.mutateAsync,
+    loginWithGoogle: loginMutation.mutateAsync,
     isLoggingIn: loginMutation.isPending,
-    changePassword: changePasswordMutation.mutateAsync,
-    isChangingPassword: changePasswordMutation.isPending,
-    updateMyPhone: updateMyPhoneMutation.mutateAsync,
-    isUpdatingMyPhone: updateMyPhoneMutation.isPending,
-    logout: logoutHandler,
+    logout,
   };
 }
