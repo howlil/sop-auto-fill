@@ -138,36 +138,33 @@ export interface PenyusunWorkbenchLogEdit {
   user?: { id: string; nama: string; email: string }
 }
 
-export interface DiagramEdgeOverrideDto {
-  dariLangkahSopId: string
-  keLangkahSopId: string
-  cabang: 'UTAMA' | 'YA' | 'TIDAK'
+export interface DiagramPathPointDto {
+  x: number
+  y: number
+}
+
+export interface DiagramArrowConnectionDto {
   sSide: 'top' | 'bottom' | 'left' | 'right'
   eSide: 'top' | 'bottom' | 'left' | 'right'
-  startX: number
-  startY: number
-  endX: number
-  endY: number
-  titikTekuk?: Array<{ urutan: number; x: number; y: number }>
+  startPoint: DiagramPathPointDto
+  endPoint: DiagramPathPointDto
+  bendPoints: DiagramPathPointDto[]
 }
 
-export interface DiagramLabelOverrideDto {
-  kunciLabel: string
-  posisiX: number
-  posisiY: number
+export interface DiagramPathOverridesDto {
+  edges?: Record<string, DiagramArrowConnectionDto>
+  labels?: Record<string, DiagramPathPointDto>
 }
 
-export interface PenyusunWorkbenchDiagramItem {
-  jenis: JenisDiagram
+export interface PenyusunWorkbenchDiagramSlice {
   layoutSeed: number
-  overridePanah?: DiagramEdgeOverrideDto[]
-  overrideLabel?: DiagramLabelOverrideDto[]
-  pathOverrides?: Record<string, unknown> | null
+  pathOverrides: DiagramPathOverridesDto | null
 }
 
-export type PenyusunWorkbenchDiagramKonfigurasi =
-  | PenyusunWorkbenchDiagramItem[]
-  | Partial<Record<JenisDiagram, PenyusunWorkbenchDiagramItem>>
+export interface PenyusunWorkbenchDiagramKonfigurasi {
+  flowchart?: PenyusunWorkbenchDiagramSlice
+  bpmn?: PenyusunWorkbenchDiagramSlice
+}
 
 export interface PenyusunWorkbenchResponse {
   detail: PenyusunWorkbenchDetail
@@ -220,7 +217,7 @@ export interface UpdateSopProsedurDto {
 export interface UpdateSopDiagramDto {
   jenis: JenisDiagram
   layoutSeed?: number
-  pathOverrides?: Record<string, unknown> | null
+  pathOverrides?: DiagramPathOverridesDto | null
 }
 
 export interface SopRiwayatVersiRow {
