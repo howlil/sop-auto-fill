@@ -2,6 +2,7 @@ import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '../src/generated/prisma';
 import {
   E2E_IDENTITY,
+  assertDisposableE2eDatabase,
   assertE2eEnvironment,
   issueE2eAccessToken,
 } from '../src/common/testing/e2e-session.helper';
@@ -22,13 +23,16 @@ function requiredPort(): number {
 
 async function main(): Promise<void> {
   assertE2eEnvironment(process.env);
+  const host = required('DATABASE_HOST');
+  const database = required('DATABASE_NAME');
+  assertDisposableE2eDatabase({ host, database });
 
   const adapter = new PrismaMariaDb({
-    host: required('DATABASE_HOST'),
+    host,
     port: requiredPort(),
     user: required('DATABASE_USER'),
     password: required('DATABASE_PASSWORD'),
-    database: required('DATABASE_NAME'),
+    database,
     connectionLimit: 2,
     connectTimeout: 15_000,
     allowPublicKeyRetrieval: true,
