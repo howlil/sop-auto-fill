@@ -49,11 +49,22 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await addStep.click()
   await addStep.click()
   await addStep.click()
+
   const activities = page.getByLabel('Kegiatan')
+  const completeness = page.getByLabel('Kelengkapan')
+  const timeAmounts = page.getByLabel('Jumlah waktu')
+  const outputs = page.getByLabel('Output')
+  const notes = page.getByLabel('Keterangan')
   await expect(activities).toHaveCount(3)
-  await activities.nth(0).fill('Mulai proses')
-  await activities.nth(1).fill('Verifikasi dokumen')
-  await activities.nth(2).fill('Selesai proses')
+
+  const activityValues = ['Mulai proses', 'Verifikasi dokumen', 'Selesai proses']
+  for (let index = 0; index < 3; index += 1) {
+    await activities.nth(index).fill(activityValues[index])
+    await completeness.nth(index).fill('Dokumen input')
+    await timeAmounts.nth(index).fill('1')
+    await outputs.nth(index).fill('Dokumen output')
+    await notes.nth(index).fill('Sesuai prosedur')
+  }
 
   await expect(page.getByRole('status').filter({ hasText: 'Tersimpan' })).toBeVisible({
     timeout: 20_000,
@@ -64,6 +75,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
   await page.getByRole('button', { name: 'Langkah' }).click()
   await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await expect(page.getByLabel('Kelengkapan').nth(1)).toHaveValue('Dokumen input')
   await page.getByRole('button', { name: 'Selesai edit' }).click()
 
   await expect(page.getByRole('tab', { name: 'Flowchart' })).toBeVisible()
@@ -94,6 +106,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
   await page.getByRole('button', { name: 'Langkah' }).click()
   await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await expect(page.getByLabel('Kelengkapan').nth(1)).toHaveValue('Dokumen input')
   await page.getByRole('button', { name: 'Selesai edit' }).click()
   await expect(page.getByText('v2', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Selesai' })).toBeVisible()
