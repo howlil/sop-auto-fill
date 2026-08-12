@@ -1,7 +1,5 @@
-import { Button } from '@/components/ui/button'
-import { SopEvaluasiStatusGroup } from '@/components/status/sop-evaluasi-status-group'
 import { SopStatusBadge } from '@/components/status/sop-status-badge'
-import type { TahapPenilaianSop } from '@/lib/evaluasi/evaluasi-domain'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/utils/cn'
 
 export interface SOPListItem {
@@ -10,11 +8,6 @@ export interface SOPListItem {
   nomor: string
   statusDokumen?: string
   statusDokumenLabel?: string
-  hasilEvaluasi?: string
-  hasilEvaluasiLabel?: string
-  statusTindakLanjut?: string | null
-  statusTindakLanjutLabel?: string | null
-  tahapPenilaian?: TahapPenilaianSop
 }
 
 export interface SOPListCardProps {
@@ -27,29 +20,11 @@ export interface SOPListCardProps {
 
 const ITEM_CLASS =
   'w-full justify-start text-left h-auto rounded-lg border px-2 py-1.5 text-xs transition-colors flex flex-col items-stretch border-border hover:bg-surface-subtle text-secondary-foreground'
-const SELECTED_ITEM_CLASS =
-  'border-primary bg-primary-subtle text-primary-hover'
+const SELECTED_ITEM_CLASS = 'border-primary bg-primary-subtle text-primary-hover'
 
 function renderStatus(sop: SOPListItem) {
-  const statusDokumen = sop.statusDokumen
-  const statusDokumenLabel = sop.statusDokumenLabel
-  if (!statusDokumen || !statusDokumenLabel) return null
-  const hasPenilaian =
-    sop.hasilEvaluasi !== undefined && sop.hasilEvaluasiLabel !== undefined
-  if (hasPenilaian) {
-    return (
-      <SopEvaluasiStatusGroup
-        statusDokumen={statusDokumen}
-        statusDokumenLabel={statusDokumenLabel}
-        hasilEvaluasi={sop.hasilEvaluasi}
-        hasilEvaluasiLabel={sop.hasilEvaluasiLabel}
-        statusTindakLanjut={sop.statusTindakLanjut}
-        statusTindakLanjutLabel={sop.statusTindakLanjutLabel}
-        tahapPenilaian={sop.tahapPenilaian}
-      />
-    )
-  }
-  return <SopStatusBadge status={statusDokumen} label={statusDokumenLabel} />
+  if (!sop.statusDokumen || !sop.statusDokumenLabel) return null
+  return <SopStatusBadge status={sop.statusDokumen} label={sop.statusDokumenLabel} />
 }
 
 function SopListItemButton({
@@ -82,11 +57,7 @@ export function SOPListCard({
   className,
 }: SOPListCardProps) {
   if (items.length === 0) {
-    return (
-      <div className={cn('p-2 text-xs text-muted-foreground', className)}>
-        Tidak ada SOP
-      </div>
-    )
+    return <div className={cn('p-2 text-xs text-muted-foreground', className)}>Tidak ada SOP</div>
   }
 
   return (
