@@ -26,7 +26,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma generate
       - run: pnpm typecheck
-      - run: pnpm test --runInBand --reporters=github-actions --reporters=summary
+      - name: Run server tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test --runInBand --reporters=github-actions --reporters=summary 2>&1 | tee jest.log
+      - name: Upload server test log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-jest-log
+          path: server/jest.log
+          if-no-files-found: ignore
       - run: pnpm build
 
   client:
