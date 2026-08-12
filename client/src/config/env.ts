@@ -1,5 +1,5 @@
 /** API dev: Vite → backend lokal. */
-const API_BASE_URL_DEVELOPMENT = 'http://localhost:3000/api/v1'
+const API_BASE_URL_DEVELOPMENT = 'http://localhost:3001/api/v1'
 const API_BASE_URL_PRODUCTION = '/api/v1'
 
 export const APP_DISPLAY_NAME = 'SOPFlow'
