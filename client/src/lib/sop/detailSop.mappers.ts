@@ -1,6 +1,5 @@
 import type {
   JenisLangkahProsedur,
-  PenyusunWorkbenchDiagramItem,
   PenyusunWorkbenchLangkah,
   PenyusunWorkbenchResponse,
   PenyusunWorkbenchDetail,
@@ -125,6 +124,6 @@ export function mapPenyusunWorkbenchToPreviewProps(data: PenyusunWorkbenchRespon
     metadata,
     prosedurRows,
     implementers,
-    diagramKonfigurasi: data.diagramKonfigurasi as PenyusunWorkbenchDiagramItem[] | undefined,
+    diagramKonfigurasi: data.diagramKonfigurasi,
   }
 }

@@ -11,7 +11,8 @@ import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop
 import { usePenyusunWorkbench } from '@/api/sop'
 import { useSopEditor } from '../SopEditorContext'
 import { useToast } from '@/hooks/useToast'
-import { printSopArsipFromPreviewProps } from '@/lib/print/pengajuan-print'
+import { printSopPdfDocument } from '@/lib/print/print-sop-pdf'
+import { sopPreviewPropsToPdfDocumentProps } from '@/lib/print/sop-pdf-props.util'
 import { mapPenyusunWorkbenchToPreviewProps } from '@/lib/sop/detailSop.mappers'
 
 export interface DetailSOPPenyusunHeaderProps {
@@ -78,7 +79,11 @@ export function DetailSOPPenyusunHeader({
         return
       }
       const previewProps = mapPenyusunWorkbenchToPreviewProps(workbench)
-      const { diagramExportFailed } = await printSopArsipFromPreviewProps(previewProps, null, { signPdf: false })
+      const pdfProps = sopPreviewPropsToPdfDocumentProps(previewProps, {
+        includeHeader: true,
+        printMode: 'header_steps_bpmn',
+      })
+      const { diagramExportFailed } = await printSopPdfDocument(pdfProps)
       if (diagramExportFailed) {
         showToast('Beberapa halaman diagram tidak dapat diekspor; PDF tetap dicetak dengan tabel langkah.', 'error')
       }

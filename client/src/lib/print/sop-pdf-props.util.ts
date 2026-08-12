@@ -28,6 +28,7 @@ export function sopPreviewPropsToPdfDocumentProps(
     metadata: preview.metadata,
     prosedurRows: preview.prosedurRows,
     implementers: preview.implementers,
+    diagramKonfigurasi: preview.diagramKonfigurasi,
     includeHeader,
     printMode,
   }
