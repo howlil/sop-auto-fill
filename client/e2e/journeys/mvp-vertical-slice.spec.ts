@@ -44,6 +44,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.getByRole('button', { name: 'Tambahkan' }).click()
   await expect(page.getByText(actorName)).toBeVisible()
 
+  await page.getByRole('button', { name: 'Langkah' }).click()
   const addStep = page.getByRole('button', { name: 'Tambah langkah' })
   await addStep.click()
   await addStep.click()
@@ -61,7 +62,9 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.reload()
   await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  await page.getByRole('button', { name: 'Langkah' }).click()
   await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await page.getByRole('button', { name: 'Selesai edit' }).click()
 
   await expect(page.getByRole('tab', { name: 'Flowchart' })).toBeVisible()
   await page.getByRole('tab', { name: 'BPMN' }).click()
@@ -89,7 +92,9 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(completedUrl)
   await waitForAppHydration(page)
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  await page.getByRole('button', { name: 'Langkah' }).click()
   await expect(page.getByLabel('Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await page.getByRole('button', { name: 'Selesai edit' }).click()
   await expect(page.getByText('v2', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Selesai' })).toBeVisible()
 })
