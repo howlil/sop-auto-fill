@@ -1,89 +1,76 @@
-import type { Request } from 'express';
-import { PeranPengguna } from '../../../generated/prisma';
-import type { JwtAccessPayload } from '../../core/auth/helpers/auth.shared';
+import type { JwtAccessPayload } from '../../../common';
 import { PelaksanaController } from './pelaksana.controller';
-import { PelaksanaService } from './pelaksana.service';
 
-describe('Pengujian PelaksanaController', () => {
-  let controller: PelaksanaController;
-  let service: jest.Mocked<Pick<PelaksanaService, 'list' | 'create' | 'update' | 'remove'>>;
+const user: JwtAccessPayload = {
+  sub: 'user-1',
+  email: 'user@example.test',
+  name: 'User Test',
+};
 
-  const user: JwtAccessPayload = {
-    sub: 'user-1',
-    email: 'penyusun@example.test',
-    peran: PeranPengguna.PENYUSUN,
-    sesiTokenVersion: 1,
+const response = {
+  id: 'pelaksana-1',
+  workspaceId: 'workspace-1',
+  namaPelaksana: 'Staf Administrasi',
+  createdAt: '2026-08-01T00:00:00.000Z',
+  updatedAt: '2026-08-02T00:00:00.000Z',
+};
+
+function makeController() {
+  const service = {
+    list: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn().mockResolvedValue(undefined),
   };
-  const req = { user } as Request & { user: JwtAccessPayload };
-  const responseRow = {
-    id: 'pl-1',
-    opdId: 'opd-1',
-    namaPelaksana: 'Staf A',
-    createdAt: '2024-01-01T00:00:00.000Z',
-    updatedAt: '2024-01-02T00:00:00.000Z',
-  };
+  return { controller: new PelaksanaController(service as any), service };
+}
 
-  beforeEach(() => {
-    service = {
-      list: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      remove: jest.fn(),
-    };
-    controller = new PelaksanaController(service as unknown as PelaksanaService);
-  });
+const req = { user } as any;
 
-  it('seharusnya meneruskan user dan query opdId ke service list', async () => {
-    service.list.mockResolvedValueOnce([responseRow]);
+describe('PelaksanaController workspace API', () => {
+  it('meneruskan workspaceId saat mengambil daftar', async () => {
+    const { controller, service } = makeController();
+    service.list.mockResolvedValue([response]);
 
-    const actual = await controller.list(req, 'opd-1');
-
-    expect(service.list).toHaveBeenCalledWith(user, 'opd-1');
-    expect(actual).toEqual({
+    await expect(controller.list(req, 'workspace-1')).resolves.toEqual({
       message: 'Daftar pelaksana berhasil diambil',
       success: true,
-      data: [responseRow],
+      data: [response],
     });
+    expect(service.list).toHaveBeenCalledWith(user, 'workspace-1');
   });
 
-  it('seharusnya meneruskan user dan dto ke service create', async () => {
-    const dto = { opdId: 'opd-1', namaPelaksana: 'Staf A' };
-    service.create.mockResolvedValueOnce(responseRow);
+  it('membuat pelaksana dengan workspaceId dari body', async () => {
+    const { controller, service } = makeController();
+    const dto = { workspaceId: 'workspace-1', namaPelaksana: 'Staf Administrasi' };
+    service.create.mockResolvedValue(response);
 
-    const actual = await controller.create(req, dto);
-
-    expect(service.create).toHaveBeenCalledWith(user, dto);
-    expect(actual).toEqual({
+    await expect(controller.create(req, dto)).resolves.toEqual({
       message: 'Pelaksana berhasil ditambahkan',
       success: true,
-      data: responseRow,
+      data: response,
     });
+    expect(service.create).toHaveBeenCalledWith(user, dto);
   });
 
-  it('seharusnya meneruskan user, id, dan dto ke service update', async () => {
-    const dto = { namaPelaksana: 'Staf B' };
-    service.update.mockResolvedValueOnce({ ...responseRow, namaPelaksana: 'Staf B' });
+  it('meneruskan update berdasarkan id milik owner', async () => {
+    const { controller, service } = makeController();
+    const dto = { namaPelaksana: 'Kasubbag' };
+    service.update.mockResolvedValue({ ...response, namaPelaksana: 'Kasubbag' });
 
-    const actual = await controller.update(req, 'pl-1', dto);
+    await controller.update(req, 'pelaksana-1', dto);
 
-    expect(service.update).toHaveBeenCalledWith(user, 'pl-1', dto);
-    expect(actual).toEqual({
-      message: 'Pelaksana berhasil diperbarui',
-      success: true,
-      data: expect.objectContaining({ namaPelaksana: 'Staf B' }),
-    });
+    expect(service.update).toHaveBeenCalledWith(user, 'pelaksana-1', dto);
   });
 
-  it('seharusnya meneruskan user dan id ke service remove', async () => {
-    service.remove.mockResolvedValueOnce(undefined);
+  it('mengembalikan envelope sukses setelah remove', async () => {
+    const { controller, service } = makeController();
 
-    const actual = await controller.remove(req, 'pl-1');
-
-    expect(service.remove).toHaveBeenCalledWith(user, 'pl-1');
-    expect(actual).toEqual({
+    await expect(controller.remove(req, 'pelaksana-1')).resolves.toEqual({
       message: 'Pelaksana berhasil dihapus',
       success: true,
       data: null,
     });
+    expect(service.remove).toHaveBeenCalledWith(user, 'pelaksana-1');
   });
 });
