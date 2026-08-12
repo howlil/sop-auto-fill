@@ -3,7 +3,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 
 export type PelaksanaRow = {
   pelaksanaId: string;
-  opdId: string;
+  workspaceId: string;
   nama: string;
   createdAt: Date;
   updatedAt: Date;
@@ -13,65 +13,27 @@ export type PelaksanaRow = {
 export class PelaksanaRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findOpdIdByPenggunaId(penggunaId: string): Promise<string | null> {
-    const row = await this.prisma.pengguna.findFirst({
-      where: { penggunaId, deletedAt: null },
-      select: { opdId: true },
-    });
-    return row?.opdId ?? null;
-  }
-
-  async findManyByOpdId(opdId: string): Promise<PelaksanaRow[]> {
+  findManyByWorkspaceId(workspaceId: string): Promise<PelaksanaRow[]> {
     return this.prisma.pelaksana.findMany({
-      where: { opdId },
-      select: {
-        pelaksanaId: true,
-        opdId: true,
-        nama: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      where: { workspaceId },
       orderBy: { nama: 'asc' },
     });
   }
 
-  async findByIdAndOpd(pelaksanaId: string, opdId: string): Promise<PelaksanaRow | null> {
+  findByIdAndWorkspace(pelaksanaId: string, workspaceId: string): Promise<PelaksanaRow | null> {
     return this.prisma.pelaksana.findFirst({
-      where: { pelaksanaId, opdId },
-      select: {
-        pelaksanaId: true,
-        opdId: true,
-        nama: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      where: { pelaksanaId, workspaceId },
     });
   }
 
-  async create(opdId: string, nama: string): Promise<PelaksanaRow> {
-    return this.prisma.pelaksana.create({
-      data: { opdId, nama },
-      select: {
-        pelaksanaId: true,
-        opdId: true,
-        nama: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  create(workspaceId: string, nama: string): Promise<PelaksanaRow> {
+    return this.prisma.pelaksana.create({ data: { workspaceId, nama } });
   }
 
-  async updateNama(pelaksanaId: string, nama: string): Promise<PelaksanaRow> {
+  updateNama(pelaksanaId: string, nama: string): Promise<PelaksanaRow> {
     return this.prisma.pelaksana.update({
       where: { pelaksanaId },
       data: { nama },
-      select: {
-        pelaksanaId: true,
-        opdId: true,
-        nama: true,
-        createdAt: true,
-        updatedAt: true,
-      },
     });
   }
 
@@ -79,11 +41,11 @@ export class PelaksanaRepository {
     await this.prisma.pelaksana.delete({ where: { pelaksanaId } });
   }
 
-  async countLangkahReferences(pelaksanaId: string): Promise<number> {
+  countLangkahReferences(pelaksanaId: string): Promise<number> {
     return this.prisma.langkahSOP.count({ where: { pelaksanaId } });
   }
 
-  async countSwimlaneReferences(pelaksanaId: string): Promise<number> {
+  countSwimlaneReferences(pelaksanaId: string): Promise<number> {
     return this.prisma.detailSOPPelaksana.count({ where: { pelaksanaId } });
   }
 }
