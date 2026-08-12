@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { JenisDiagram, Prisma } from '../../../generated/prisma';
+import { JenisDiagram, Prisma, type StatusSOP } from '../../../generated/prisma';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import type { DiagramPathOverridesJson } from './diagram-edge-key.util';
 import {
@@ -20,18 +20,36 @@ export class SopDiagramRepository {
 
   async findDetailIdByDetailOrSopId(
     detailOrSopId: string,
-  ): Promise<{ detailSopId: string; sopOpdId: string } | null> {
+  ): Promise<{
+    detailSopId: string;
+    ownerId: string;
+    status: StatusSOP;
+  } | null> {
     const direct = await this.prisma.detailSOP.findUnique({
       where: { detailSopId: detailOrSopId },
-      select: { detailSopId: true, sop: { select: { opdId: true } } },
+      select: {
+        detailSopId: true,
+        sop: {
+          select: {
+            status: true,
+            workspace: { select: { ownerId: true } },
+          },
+        },
+      },
     });
     if (direct !== null) {
-      return { detailSopId: direct.detailSopId, sopOpdId: direct.sop.opdId };
+      return {
+        detailSopId: direct.detailSopId,
+        ownerId: direct.sop.workspace.ownerId,
+        status: direct.sop.status,
+      };
     }
+
     const header = await this.prisma.sOP.findUnique({
       where: { sopId: detailOrSopId },
       select: {
-        opdId: true,
+        status: true,
+        workspace: { select: { ownerId: true } },
         detailSops: {
           orderBy: { versi: 'desc' },
           take: 1,
@@ -40,16 +58,12 @@ export class SopDiagramRepository {
       },
     });
     const latestDetailId = header?.detailSops[0]?.detailSopId;
-    if (latestDetailId === undefined || header === undefined || header === null) return null;
-    return { detailSopId: latestDetailId, sopOpdId: header.opdId };
-  }
-
-  async findDetailStatus(detailSopId: string): Promise<string | null> {
-    const row = await this.prisma.detailSOP.findUnique({
-      where: { detailSopId },
-      select: { status: true },
-    });
-    return row?.status ?? null;
+    if (latestDetailId === undefined || header === null) return null;
+    return {
+      detailSopId: latestDetailId,
+      ownerId: header.workspace.ownerId,
+      status: header.status,
+    };
   }
 
   async findConfigsByDetailSopId(detailSopId: string) {
@@ -57,11 +71,7 @@ export class SopDiagramRepository {
       where: { detailSopId },
       include: {
         overridePanah: {
-          include: {
-            titikTekuk: {
-              orderBy: { urutan: 'asc' },
-            },
-          },
+          include: { titikTekuk: { orderBy: { urutan: 'asc' } } },
         },
         overrideLabel: true,
       },
@@ -71,9 +81,7 @@ export class SopDiagramRepository {
   async upsertConfig(input: UpsertDiagramConfigInput) {
     return this.prisma.$transaction(async (tx) => {
       const data: Prisma.KonfigurasiDiagramSOPUpdateInput = {};
-      if (input.layoutSeed !== undefined) {
-        data.layoutSeed = input.layoutSeed;
-      }
+      if (input.layoutSeed !== undefined) data.layoutSeed = input.layoutSeed;
       const config = await tx.konfigurasiDiagramSOP.upsert({
         where: {
           detailSopId_jenis: {
@@ -88,9 +96,8 @@ export class SopDiagramRepository {
         },
         update: data,
       });
-      if (input.pathOverrides === undefined) {
-        return config;
-      }
+      if (input.pathOverrides === undefined) return config;
+
       await tx.titikTekukPanahDiagramSOP.deleteMany({
         where: { detailSopId: input.detailSopId, jenis: input.jenis },
       });
@@ -100,9 +107,8 @@ export class SopDiagramRepository {
       await tx.overrideLabelDiagramSOP.deleteMany({
         where: { detailSopId: input.detailSopId, jenis: input.jenis },
       });
-      if (input.pathOverrides === null) {
-        return config;
-      }
+      if (input.pathOverrides === null) return config;
+
       const flattened = flattenDiagramPathOverridesToRows({
         detailSopId: input.detailSopId,
         jenis: input.jenis,
@@ -137,16 +143,11 @@ export class SopDiagramRepository {
       where: { detailSopId: sourceDetailSopId },
       include: {
         overridePanah: {
-          include: {
-            titikTekuk: {
-              orderBy: { urutan: 'asc' },
-            },
-          },
+          include: { titikTekuk: { orderBy: { urutan: 'asc' } } },
         },
         overrideLabel: true,
       },
     });
-    if (sourceConfigs.length === 0) return;
     for (const cfg of sourceConfigs) {
       await tx.konfigurasiDiagramSOP.create({
         data: {
@@ -158,9 +159,7 @@ export class SopDiagramRepository {
       for (const edge of cfg.overridePanah) {
         const newFrom = langkahIdMap.get(edge.dariLangkahSopId);
         const newTo = langkahIdMap.get(edge.keLangkahSopId);
-        if (newFrom === undefined || newTo === undefined) {
-          continue;
-        }
+        if (newFrom === undefined || newTo === undefined) continue;
         await tx.overridePanahDiagramSOP.create({
           data: {
             detailSopId: targetDetailSopId,
