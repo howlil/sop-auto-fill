@@ -15,12 +15,29 @@ type E2eUser = {
   readonly name: string;
 };
 
+type E2eDatabaseTarget = {
+  readonly host: string;
+  readonly database: string;
+};
+
 export function assertE2eEnvironment(env: E2eEnvironment): void {
   if (env.NODE_ENV === 'production') {
     throw new Error('E2E test harness tidak boleh dijalankan pada NODE_ENV=production');
   }
   if (env.E2E_TEST !== '1') {
     throw new Error('E2E test harness membutuhkan E2E_TEST=1');
+  }
+}
+
+export function assertDisposableE2eDatabase(target: E2eDatabaseTarget): void {
+  const host = target.host.trim().toLowerCase();
+  if (host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') {
+    throw new Error('E2E seed hanya boleh menggunakan database localhost');
+  }
+
+  const database = target.database.trim();
+  if (!/(^|[_-])(e2e|test)($|[_-])/i.test(database)) {
+    throw new Error('E2E seed membutuhkan database disposable dengan nama test/e2e');
   }
 }
 
