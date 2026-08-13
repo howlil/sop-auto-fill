@@ -15,4 +15,9 @@ export default defineConfig({
     tanstackStart(),
     viteReact(),
   ],
+  ssr: {
+    // Route validation runs inside the production SSR bundle. Keep this small adapter bundled
+    // so the runtime image can continue installing production dependencies only.
+    noExternal: ['@tanstack/router-zod-adapter'],
+  },
 })
