@@ -16,14 +16,28 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-
-FRONTEND_PORT="${FRONTEND_PORT:-8080}"
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f compose.yml)
 "${COMPOSE[@]}" config --quiet
+
+compose_env_value() {
+  local key="$1"
+  "${COMPOSE[@]}" config --environment | awk -v key="$key" '
+    index($0, key "=") == 1 {
+      sub(/^[^=]*=/, "")
+      print
+      found = 1
+      exit
+    }
+    END { if (!found) exit 1 }
+  '
+}
+
+FRONTEND_PORT="$(compose_env_value FRONTEND_PORT || true)"
+FRONTEND_PORT="${FRONTEND_PORT:-8080}"
+[[ "$FRONTEND_PORT" =~ ^[0-9]+$ ]] && (( FRONTEND_PORT >= 1 && FRONTEND_PORT <= 65535 )) || {
+  echo "FRONTEND_PORT must be an integer between 1 and 65535" >&2
+  exit 1
+}
 
 show_diagnostics() {
   echo "--- docker compose ps ---" >&2
