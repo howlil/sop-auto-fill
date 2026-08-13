@@ -136,3 +136,10 @@ jobs:
             client/test-results
             server/e2e-server.log
           if-no-files-found: ignore
+
+  production-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify production compose contract
+        run: bash scripts/production-contract.sh
