@@ -37,6 +37,10 @@ grep -q 'target: /app/storage/sop-pdf' "$tmp" || { echo "PDF persistence target 
 for script in scripts/deploy.sh scripts/backup.sh scripts/restore.sh; do
   [[ -x "$script" ]] || { echo "$script must exist and be executable" >&2; exit 1; }
   bash -n "$script"
+  ! grep -Eq '^[[:space:]]*source[[:space:]].*ENV_FILE' "$script" || {
+    echo "$script must not source the Compose env file" >&2
+    exit 1
+  }
 done
 
 grep -q 'git pull --ff-only' scripts/deploy.sh || { echo "deploy must use ff-only pull" >&2; exit 1; }
@@ -45,6 +49,7 @@ grep -q 'prisma migrate deploy' scripts/deploy.sh || { echo "deploy must run mig
 grep -q 'api/health/ready' scripts/deploy.sh || { echo "deploy must verify backend readiness" >&2; exit 1; }
 grep -q 'BACKUP_RETENTION_DAYS' scripts/backup.sh || { echo "backup retention missing" >&2; exit 1; }
 grep -q -- '--yes' scripts/restore.sh || { echo "restore destructive confirmation missing" >&2; exit 1; }
+grep -q 'DROP DATABASE' scripts/restore.sh || { echo "restore must replace the database state" >&2; exit 1; }
 
 grep -q 'accounts.google.com' client/nginx.conf || {
   echo "frontend CSP must allow Google Identity Services" >&2
