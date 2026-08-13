@@ -227,17 +227,20 @@ jobs:
           test ! -e backups-ci/old.sql.gz
           printf '%s' "$backup" > .production-backup-path
 
-      - name: Prove restore against disposable database
+      - name: Prove restore replaces database state
         run: |
           backup="$(cat .production-backup-path)"
           docker compose --env-file .env.production.ci stop frontend backend
           docker compose --env-file .env.production.ci exec -T mysql \
             mysql -usop -psop-ci-password sop_prod_ci \
-            -e 'DROP TABLE ci_persistence_probe;'
+            -e "DROP TABLE ci_persistence_probe; CREATE TABLE ci_post_backup_probe (id INT PRIMARY KEY); INSERT INTO ci_post_backup_probe VALUES (1);"
           PRODUCTION_ENV_FILE=.env.production.ci scripts/restore.sh "$backup" --yes
           docker compose --env-file .env.production.ci exec -T mysql \
             mysql -N -usop -psop-ci-password sop_prod_ci \
             -e "SELECT COUNT(*) FROM ci_persistence_probe WHERE id=1" | grep -qx '1'
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -N -usop -psop-ci-password sop_prod_ci \
+            -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='sop_prod_ci' AND table_name='ci_post_backup_probe'" | grep -qx '0'
           docker compose --env-file .env.production.ci up -d --wait backend frontend
           curl --fail --silent http://127.0.0.1:18080/api/health/ready | grep -q '"status":"ok"'
 
