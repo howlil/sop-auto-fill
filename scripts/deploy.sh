@@ -11,8 +11,8 @@ command -v git >/dev/null || { echo "git is required" >&2; exit 1; }
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 docker compose version >/dev/null
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "Tracked repository changes detected. Commit or discard them before deploy." >&2
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "Repository changes detected. Commit, ignore, or discard them before deploy." >&2
   exit 1
 fi
 
