@@ -13,6 +13,8 @@ FROM base AS prod-deps
 RUN pnpm install --frozen-lockfile --prod
 
 FROM dev-deps AS builder
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 COPY . .
 RUN pnpm build && test -f dist/server/server.js
 

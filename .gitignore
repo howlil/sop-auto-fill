@@ -25,7 +25,11 @@ lerna-debug.log*
 # environment files
 .env
 .env.*
+!.env.production.example
 *.local
+
+# production runtime data
+backups/
 
 # OS and editor files
 .DS_Store
