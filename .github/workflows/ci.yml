@@ -139,9 +139,116 @@ jobs:
             server/e2e-server.log
           if-no-files-found: ignore
 
-  production-contract:
+  production-compose:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PRODUCTION_ENV_FILE: .env.production.ci
     steps:
       - uses: actions/checkout@v4
-      - name: Verify production compose contract
+
+      - name: Create disposable production env
+        run: |
+          cat > .env.production.ci <<'EOF'
+          FRONTEND_PORT=18080
+          PUBLIC_APP_ORIGIN=http://localhost:18080
+          GOOGLE_CLIENT_ID=ci-client-id.apps.googleusercontent.com
+          JWT_SECRET=ci-production-secret-that-is-at-least-32-characters
+          JWT_EXPIRATION=15m
+          MYSQL_DATABASE=sop_prod_ci
+          MYSQL_USER=sop
+          MYSQL_PASSWORD=sop-ci-password
+          MYSQL_ROOT_PASSWORD=root-ci-password
+          SWAGGER_ENABLED=false
+          BACKUP_DIR=./backups-ci
+          BACKUP_RETENTION_DAYS=14
+          EOF
+
+      - name: Validate production contract
         run: bash scripts/production-contract.sh
+
+      - name: Build production images
+        run: docker compose --env-file .env.production.ci build
+
+      - name: Start MySQL
+        run: docker compose --env-file .env.production.ci up -d --wait mysql
+
+      - name: Deploy migrations twice
+        run: |
+          docker compose --env-file .env.production.ci run --rm backend pnpm prisma migrate deploy
+          docker compose --env-file .env.production.ci run --rm backend pnpm prisma migrate deploy
+
+      - name: Prove MySQL volume persistence
+        run: |
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -usop -psop-ci-password sop_prod_ci \
+            -e "CREATE TABLE IF NOT EXISTS ci_persistence_probe (id INT PRIMARY KEY); INSERT IGNORE INTO ci_persistence_probe VALUES (1);"
+          docker compose --env-file .env.production.ci stop mysql
+          docker compose --env-file .env.production.ci rm -f mysql
+          docker compose --env-file .env.production.ci up -d --wait mysql
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -N -usop -psop-ci-password sop_prod_ci \
+            -e "SELECT COUNT(*) FROM ci_persistence_probe WHERE id=1" | grep -qx '1'
+
+      - name: Start production application
+        run: docker compose --env-file .env.production.ci up -d --wait backend frontend
+
+      - name: Verify public ingress and readiness
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:18080/api/health/ready | grep -q '"status":"ok"'; then
+              break
+            fi
+            if [[ "$attempt" -eq 60 ]]; then
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:18080/ >/dev/null
+
+      - name: Prove PDF volume persistence
+        run: |
+          docker compose --env-file .env.production.ci exec -T backend \
+            sh -c 'echo probe > /app/storage/sop-pdf/ci-probe.txt'
+          docker compose --env-file .env.production.ci stop backend
+          docker compose --env-file .env.production.ci rm -f backend
+          docker compose --env-file .env.production.ci up -d --wait backend
+          docker compose --env-file .env.production.ci exec -T backend \
+            grep -qx probe /app/storage/sop-pdf/ci-probe.txt
+
+      - name: Prove backup retention and create restorable dump
+        run: |
+          mkdir -p backups-ci
+          printf '%s\n' 'old backup probe' | gzip -c > backups-ci/old.sql.gz
+          touch -d '20 days ago' backups-ci/old.sql.gz
+          backup="$(PRODUCTION_ENV_FILE=.env.production.ci scripts/backup.sh)"
+          test -s "$backup"
+          gzip -t "$backup"
+          test ! -e backups-ci/old.sql.gz
+          printf '%s' "$backup" > .production-backup-path
+
+      - name: Prove restore against disposable database
+        run: |
+          backup="$(cat .production-backup-path)"
+          docker compose --env-file .env.production.ci stop frontend backend
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -usop -psop-ci-password sop_prod_ci \
+            -e 'DROP TABLE ci_persistence_probe;'
+          PRODUCTION_ENV_FILE=.env.production.ci scripts/restore.sh "$backup" --yes
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -N -usop -psop-ci-password sop_prod_ci \
+            -e "SELECT COUNT(*) FROM ci_persistence_probe WHERE id=1" | grep -qx '1'
+          docker compose --env-file .env.production.ci up -d --wait backend frontend
+          curl --fail --silent http://127.0.0.1:18080/api/health/ready | grep -q '"status":"ok"'
+
+      - name: Production Compose diagnostics
+        if: failure()
+        run: |
+          docker compose --env-file .env.production.ci ps || true
+          docker compose --env-file .env.production.ci logs --no-color --tail=200 || true
+
+      - name: Cleanup production Compose stack
+        if: always()
+        run: |
+          docker compose --env-file .env.production.ci down -v --remove-orphans || true
+          rm -rf .env.production.ci backups-ci .production-backup-path
