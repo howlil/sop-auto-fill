@@ -34,4 +34,16 @@ grep -q 'target: /var/lib/mysql' "$tmp" || { echo "mysql persistence target miss
 grep -q 'source: sop_pdf_data' "$tmp" || { echo "sop_pdf_data source missing" >&2; exit 1; }
 grep -q 'target: /app/storage/sop-pdf' "$tmp" || { echo "PDF persistence target missing" >&2; exit 1; }
 
+for script in scripts/deploy.sh scripts/backup.sh scripts/restore.sh; do
+  [[ -x "$script" ]] || { echo "$script must exist and be executable" >&2; exit 1; }
+  bash -n "$script"
+done
+
+grep -q 'git pull --ff-only' scripts/deploy.sh || { echo "deploy must use ff-only pull" >&2; exit 1; }
+grep -q 'scripts/backup.sh' scripts/deploy.sh || { echo "deploy must backup before migration" >&2; exit 1; }
+grep -q 'prisma migrate deploy' scripts/deploy.sh || { echo "deploy must run migrate deploy" >&2; exit 1; }
+grep -q 'api/health/ready' scripts/deploy.sh || { echo "deploy must verify backend readiness" >&2; exit 1; }
+grep -q 'BACKUP_RETENTION_DAYS' scripts/backup.sh || { echo "backup retention missing" >&2; exit 1; }
+grep -q -- '--yes' scripts/restore.sh || { echo "restore destructive confirmation missing" >&2; exit 1; }
+
 echo "production compose contract: ok"
