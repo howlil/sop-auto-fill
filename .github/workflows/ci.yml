@@ -105,8 +105,10 @@ jobs:
         run: pnpm --dir client install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm --dir server exec prisma generate
-      - name: Prepare disposable E2E database
-        run: pnpm --dir server exec prisma db push
+      - name: Deploy Prisma migrations to disposable E2E database
+        run: pnpm --dir server exec prisma migrate deploy
+      - name: Verify migration deployment is idempotent
+        run: pnpm --dir server exec prisma migrate deploy
       - name: Build server
         run: pnpm --dir server build
       - name: Start server
@@ -136,6 +138,31 @@ jobs:
             client/test-results
             server/e2e-server.log
           if-no-files-found: ignore
+
+  migration-baseline-candidate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: mysql://candidate:candidate@127.0.0.1:3306/candidate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install server dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      - name: Generate baseline migration candidate
+        run: |
+          mkdir -p server/.tmp
+          pnpm --dir server exec prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > server/.tmp/baseline.sql
+          test -s server/.tmp/baseline.sql
+      - name: Upload baseline migration candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-migration-candidate
+          path: server/.tmp/baseline.sql
 
   production-contract:
     runs-on: ubuntu-latest
