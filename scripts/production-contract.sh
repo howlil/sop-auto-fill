@@ -28,7 +28,10 @@ mysql_block="$(sed -n '/^  mysql:$/,/^  [a-zA-Z0-9_-]*:$/p' "$tmp")"
 
 grep -q 'condition: service_healthy' "$tmp" || { echo "healthy dependency gating missing" >&2; exit 1; }
 grep -q '/api/health/ready' "$tmp" || { echo "backend readiness healthcheck missing" >&2; exit 1; }
-grep -q 'mysql_data:/var/lib/mysql' "$tmp" || { echo "mysql persistence missing" >&2; exit 1; }
-grep -q 'sop_pdf_data:/app/storage/sop-pdf' "$tmp" || { echo "PDF persistence missing" >&2; exit 1; }
+
+grep -q 'source: mysql_data' "$tmp" || { echo "mysql_data source missing" >&2; exit 1; }
+grep -q 'target: /var/lib/mysql' "$tmp" || { echo "mysql persistence target missing" >&2; exit 1; }
+grep -q 'source: sop_pdf_data' "$tmp" || { echo "sop_pdf_data source missing" >&2; exit 1; }
+grep -q 'target: /app/storage/sop-pdf' "$tmp" || { echo "PDF persistence target missing" >&2; exit 1; }
 
 echo "production compose contract: ok"
