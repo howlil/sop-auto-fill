@@ -46,4 +46,9 @@ grep -q 'api/health/ready' scripts/deploy.sh || { echo "deploy must verify backe
 grep -q 'BACKUP_RETENTION_DAYS' scripts/backup.sh || { echo "backup retention missing" >&2; exit 1; }
 grep -q -- '--yes' scripts/restore.sh || { echo "restore destructive confirmation missing" >&2; exit 1; }
 
+grep -q 'accounts.google.com' client/nginx.conf || {
+  echo "frontend CSP must allow Google Identity Services" >&2
+  exit 1
+}
+
 echo "production compose contract: ok"
