@@ -1,16 +1,15 @@
 # Current Iteration
 
 - **Iteration:** `2-production-hardening`
-- **Status:** `READY_FOR_REVIEW`
-- **Working branch:** `feat/production-hardening`
-- **Pull request:** `#4`
-- **Verified head:** `8664066be987827846b94e4a33c42dc817a775b7`
-- **Verification:** GitHub Actions run `#187` / `31688082742` — server, client, E2E, dan production-compose `success`
+- **Status:** `COMPLETE`
+- **Working branch:** `feat/production-hardening` (merged via PR #4)
+- **Integration:** squash-merged to `master` as `ebf8855c45d8e2446a580ef8b93645aea85fbb82`
+- **Post-merge verification:** GitHub Actions run `#189` / `31710518699` — server, client, E2E, dan production-compose `success`
 - **Goal:** membuat aplikasi dapat dideploy dan dipulihkan secara pragmatis di MyPaaS menggunakan Docker Compose biasa, persistent MySQL/PDF storage, Prisma migrations, backup/restore, health verification, dan dokumentasi operasi tanpa registry atau CD otomatis.
 
 ## User-Approved Direction
 
-User secara eksplisit menyetujui transition ke Iteration 2 dan mengunci keputusan berikut:
+User secara eksplisit menyetujui transition dan merge Iteration 2 dengan keputusan berikut:
 
 - target MyPaaS;
 - Docker Compose biasa dari source repository;
@@ -36,10 +35,12 @@ Production runbook: `docs/production-deployment.md`.
 7. Run #177 GREEN: SSR dependency dibundle; public readiness, DB/PDF persistence, backup retention, dan restore lulus.
 8. Run #180 RED review gate: operator scripts masih men-source Compose env file di host.
 9. Run #187 GREEN: host secret sourcing dihapus, restore mengganti database state secara penuh, dan seluruh mandatory jobs kembali lulus.
+10. Run #188 GREEN: final PR head `8c405bf6e2fdbca4b6e18f45aa442aaea2f42da6` lulus seluruh mandatory jobs sebelum merge.
+11. Run #189 GREEN: squash merge commit `ebf8855c45d8e2446a580ef8b93645aea85fbb82` lulus ulang seluruh mandatory jobs di `master`.
 
 ## Verified Production Behavior
 
-Run #187 membuktikan pada disposable production Compose environment:
+Post-merge run #189 membuktikan pada disposable production Compose environment:
 
 - image frontend/backend dapat dibuild langsung dari source repository;
 - MySQL 8.4 production service menjadi healthy;
@@ -48,7 +49,7 @@ Run #187 membuktikan pada disposable production Compose environment:
 - frontend + backend production container healthy dan `/api/health/ready` dapat diakses melalui public frontend ingress;
 - SOP PDF named volume bertahan setelah backend container dihapus dan dibuat ulang;
 - `backup.sh` menghasilkan `.sql.gz` valid dan retention menghapus backup >14 hari;
-- `restore.sh` mengembalikan data snapshot serta menghapus tabel yang dibuat setelah backup;
+- `restore.sh` mengganti database state kembali ke snapshot backup;
 - server typecheck/tests/build, client typecheck/tests/build, dan MVP Playwright E2E tetap hijau.
 
 ## Review Findings Resolved
@@ -60,13 +61,6 @@ Run #187 membuktikan pada disposable production Compose environment:
 - MySQL dan backend tidak dipublish ke host; hanya frontend ingress yang diekspos.
 - Deploy menolak tracked maupun untracked repository changes yang tidak di-ignore sebelum `git pull --ff-only`.
 
-## Integration Gate
+## Transition State
 
-Implementation sudah siap direview tetapi **belum boleh otomatis di-merge**. Iteration ini menambahkan baseline production migration history dan security-sensitive CSP behavior, sehingga termasuk high-risk exception pada `AGENTS.md`.
-
-Setelah user menyetujui PR #4:
-
-1. squash merge ke `master`;
-2. verifikasi master CI sekali lagi;
-3. ubah iteration menjadi `COMPLETE` dengan post-merge evidence;
-4. hapus branch `feat/production-hardening` bila tooling mendukung.
+Iteration 2 selesai dan sudah terintegrasi ke `master`. Jangan memulai Iteration 3 atau memperluas scope produk hanya dari file ini; transition berikutnya harus berasal dari instruksi/approval user yang eksplisit.
