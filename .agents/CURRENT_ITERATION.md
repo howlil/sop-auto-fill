@@ -2,8 +2,8 @@
 
 - **Iteration:** `1-mvp-vertical-slice`
 - **Status:** `COMPLETE`
-- **Working branch:** `feat/mvp-vertical-slice`
-- **Integration:** PR #3 pending final review and squash merge to `master`
+- **Working branch:** `feat/mvp-vertical-slice` (merged via PR #3)
+- **Integration:** merged to `master` as `1c8a29d628403ca55b72c55d5511f5bfcefc8171`; post-merge CI run #152 succeeded
 - **Goal:** membuktikan satu alur MVP SOP dapat dijalankan end-to-end pada real frontend + real backend + test database tanpa bergantung pada live Google OAuth di CI.
 
 ## Execution Result
@@ -12,7 +12,9 @@ Vertical slice yang telah diverifikasi:
 
 `authenticated session -> create workspace -> create pelaksana -> create SOP -> edit/autosave/reload -> Flowchart/BPMN -> print/PDF generation -> complete/read-only -> create new version DRAFT`
 
-Fresh verification evidence sebelum iteration ditutup: GitHub Actions run #145 pada head `9c06a9482` menjalankan server, client, dan E2E; ketiga job selesai `success`.
+Verification evidence sebelum merge: GitHub Actions run #145 pada head `9c06a9482` menjalankan server, client, dan E2E; ketiga job selesai `success`.
+
+Post-merge verification: GitHub Actions run #152 pada `master` commit `1c8a29d628403ca55b72c55d5511f5bfcefc8171` menjalankan server, client, dan E2E; ketiga job selesai `success`.
 
 ## Constraints Preserved
 
@@ -21,7 +23,7 @@ Fresh verification evidence sebelum iteration ditutup: GitHub Actions run #145 p
 - Journey utama menggunakan real API dan disposable MySQL database; backend tidak di-mock di browser.
 - Editor SOP, Flowchart, BPMN, PDF, dan versioning hanya diubah ketika E2E membuktikan blocker/regression nyata.
 - Playwright acceptance surface aktif hanya menguji product Workspace/SOP saat ini; journey legacy OPD/evaluasi/TTE/public archive tidak lagi dijalankan oleh config aktif.
-- Seluruh iteration dikerjakan di satu working branch `feat/mvp-vertical-slice`.
+- Seluruh implementation iteration dikerjakan di satu working branch `feat/mvp-vertical-slice` dan diintegrasikan melalui satu PR.
 
 ## Completion Evidence
 
@@ -32,9 +34,9 @@ Fresh verification evidence sebelum iteration ditutup: GitHub Actions run #145 p
 5. PDF generation mencapai real blob print iframe; OS print dialog tidak dijadikan assertion karena Chromium headless tidak menyediakan lifecycle print yang deterministik.
 6. SOP `COMPLETED` terbukti read-only dan hanya dapat diedit melalui Create New Version.
 7. Create New Version terbukti meng-clone data menjadi versi `v2` berstatus editable `DRAFT`.
-8. Server/client typecheck, unit tests, build, dan E2E gate semuanya hijau pada run #145.
+8. Server/client typecheck, unit tests, build, dan E2E gate semuanya hijau sebelum merge dan kembali hijau pada `master` setelah merge.
 9. Auth controller production hanya mengekspos Google login, `/auth/me`, dan logout; test harness tidak menambah endpoint auth production.
 
-## Next Integration Step
+## Transition State
 
-PR #3 harus melewati final review tanpa blocker, lalu squash merge ke `master` dan master CI diverifikasi. Status iteration tetap `COMPLETE`; langkah tersebut adalah integrasi hasil iteration, bukan penambahan scope baru.
+Iteration 1 selesai dan sudah terintegrasi ke `master`. Jangan memulai Iteration 2 atau memperluas scope produk hanya dari file ini; transition berikutnya harus berasal dari instruksi/approval user yang eksplisit.
