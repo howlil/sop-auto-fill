@@ -6,235 +6,174 @@ Branch: `feat/smart-template-auto-fill`
 
 ## 1. Context
 
-Iteration 1 established the executable SOP authoring vertical slice: authenticated user, private workspace, SOP catalog, editable draft, autosave, Flowchart/BPMN rendering, completion, version cloning, print, and PDF. Iteration 2 hardened the same product for pragmatic MyPaaS deployment with Docker Compose, persistent MySQL/PDF storage, Prisma migrations, backup/restore, and production verification.
+Iteration 1 established the executable SOP authoring vertical slice: authenticated user, private workspace, SOP catalog, editable draft, autosave, Flowchart/BPMN rendering, completion, version cloning, print, and PDF. Iteration 2 hardened that product for MyPaaS deployment with Docker Compose, persistent MySQL/PDF storage, Prisma migrations, backup/restore, and production verification.
 
-The next product gap is the reason this repository is named `sop-auto-fill`: creating a new SOP still begins from a mostly empty authoring state. The user must repeatedly enter similar structure, actors, supporting metadata, and procedure scaffolding even when the workspace already contains reusable information.
+The remaining product gap is the core promise of `sop-auto-fill`: a new SOP still begins from a mostly empty authoring state. Iteration 3 adds deterministic template-driven creation while preserving the existing editor and lifecycle as the only authoring implementation after creation.
 
-Iteration 3 therefore introduces a template-driven creation path that creates an ordinary editable SOP draft. It must not replace, fork, or redesign the existing editor. After draft creation, all existing authoring, autosave, diagram, completion, versioning, print, and PDF behavior remains the source of truth.
+## 2. Goal and Success Flow
 
-## 2. Goal
+Reduce repetitive SOP setup by allowing a user to create a normal editable `DRAFT` from a read-only system template plus reusable workspace actors.
 
-Reduce repetitive SOP setup by allowing a user to create a valid editable SOP draft from a system template and reusable workspace data.
+The target flow is:
 
-Success means a user can:
+`Login -> Workspace -> Buat SOP -> SOP Kosong / Dari Template -> Template Preview -> Isi identitas -> Konfirmasi -> Existing SOP Editor`
 
-1. open a private workspace;
-2. choose `Buat SOP`;
-3. choose either `Kosong` or a system template;
-4. provide the minimum identity fields required for the new SOP;
-5. preview/confirm reusable workspace data that will be applied;
-6. create the draft transactionally;
-7. land in the existing SOP editor with template content already populated;
-8. edit, autosave, reload, render Flowchart/BPMN, complete, create a new version, print, and export PDF using the existing product behavior.
+For template creation, success means the user can preview what will be reused or created, confirm once, receive a complete draft transactionally, and then continue through the existing autosave, reload, Flowchart/BPMN, Complete, Create New Version, print, and PDF behavior.
 
 ## 3. Non-Goals
 
 Iteration 3 does not add:
 
-- AI/LLM-generated procedure text;
-- natural-language prompting;
-- user-built template designer;
-- template marketplace/sharing;
-- organization collaboration or multi-user workspaces;
-- approval, evaluation, TTE, public archive, OPD roles, or WhatsApp workflow;
-- automatic modification of an existing SOP without explicit user action;
-- automatic insertion of regulations merely because they exist in the user library.
+- AI/LLM-generated text or natural-language prompting;
+- user-built template designer or template sharing;
+- multi-user collaboration;
+- approval/evaluation/TTE/public archive/OPD roles/WhatsApp;
+- automatic changes to existing SOPs;
+- automatic attachment of regulations from the user's regulation library.
 
-Those are intentionally deferred so the iteration proves deterministic auto-fill first.
+AI assistance is deferred until deterministic auto-fill is proven.
 
 ## 4. Considered Approaches
 
-### Approach A — Hard-coded templates in frontend
+### A. Frontend-owned template payloads
 
-The client owns template definitions and sends a fully expanded SOP payload to the existing API.
+Fastest prototype, but rejected because canonical business/template data would cross the trust boundary from client to server and atomic actor/step creation would become harder to validate.
 
-Advantages:
-- fastest UI prototype;
-- no new persistent template model.
+### B. Backend code-defined templates
 
-Problems:
-- business/template rules become client-owned;
-- large nested payload crosses the trust boundary;
-- server cannot independently validate a canonical template;
-- changes to template structure require coordinating client behavior with server persistence;
-- difficult to make template creation atomic with actor resolution and procedure references.
+Deterministic and low-migration, but template content would be coupled to application releases and a later move to manageable templates would require replacing the storage contract.
 
-Rejected.
+### C. Persisted read-only system templates + transactional server instantiation
 
-### Approach B — Code-defined templates in backend only
+Selected. The database owns template definitions; product APIs expose them read-only; one server transaction creates the ordinary SOP draft. This keeps the server authoritative, gives stable template identity/versioning, and leaves a clean future path to user-defined templates without changing the draft creation contract.
 
-The backend stores immutable TypeScript template definitions and exposes them through an API.
+## 5. Product Behavior
 
-Advantages:
-- deterministic and server-owned;
-- no template migration tables;
-- low operational risk for a small fixed template set.
+The existing workspace SOP catalog keeps a single primary `Buat SOP` action. The creation surface offers two sources:
 
-Problems:
-- template content is coupled to application releases;
-- future template administration requires a migration from code definitions to persistence;
-- template identity/version history is less explicit.
+- `SOP Kosong`: invokes the existing blank creation path unchanged;
+- `Dari Template`: loads active system templates.
 
-Viable fallback, but not selected.
+A template preview shows:
 
-### Approach C — Persisted read-only system templates, instantiated by server transaction
+- template name, description, and version;
+- initial step count;
+- actor names in first-use order;
+- actors that already exist in the workspace;
+- actors that will be added to the workspace;
+- non-empty lampiran defaults.
 
-The database stores system templates and their ordered steps. The API exposes templates as read-only catalog data. Creating from a template invokes one backend transaction that creates the SOP project, initial DetailSOP, resolves/reuses workspace actors, attaches swimlanes, writes ordered procedure steps, and applies deterministic template metadata.
+The identity form contains the existing required creation values: `judul`, `nomorSop`, and `namaLembaga`.
 
-Advantages:
-- server remains authoritative;
-- template data has stable IDs and explicit versioning;
-- clean path to future user-defined templates without changing the draft creation contract;
-- transactional instantiation protects partial drafts;
-- no duplicate editor implementation.
+Nothing is persisted until the user confirms. After successful creation the client navigates to the existing SOP editor. There is no separate template editor mode.
 
-Trade-off:
-- requires a forward-only Prisma migration and seed/update strategy.
+## 6. Exact Domain Model
 
-Selected.
-
-## 5. Product Flow
-
-The workspace SOP catalog keeps one primary `Buat SOP` action. Activating it opens a creation flow with two explicit sources:
-
-- `SOP Kosong` — preserves current creation behavior;
-- `Dari Template` — lists active system templates.
-
-For a template draft, the user sees:
-
-- template name and short purpose;
-- number of initial steps;
-- actors/swimlanes that will be reused or created in the workspace;
-- prefilled lampiran categories, if any;
-- required identity fields: title, SOP number, and institution name.
-
-The user confirms creation. The server returns the newly created SOP/detail identifier. The client navigates to the existing editor route.
-
-There is no separate "template editor mode" after creation. The result is a normal `DRAFT`.
-
-## 6. Domain Model
-
-Add two persisted models.
+Iteration 3 adds exactly two persisted template models.
 
 ### `SopTemplate`
 
-Represents a stable system template definition.
-
 Fields:
 
-- `templateId` UUID primary key;
-- `key` unique stable machine identifier, for example `administrasi-umum`;
-- `name` display name;
-- `description` short user-facing purpose;
-- `version` integer;
-- `isActive` boolean;
-- optional deterministic lampiran defaults stored as text fields or a normalized child structure only if existing repository conventions make normalization materially simpler;
-- timestamps.
+- `templateId String @id @default(uuid()) @db.Char(36)`
+- `key String @unique @db.VarChar(120)`
+- `name String @db.VarChar(255)`
+- `description String @db.VarChar(500)`
+- `version Int`
+- `isActive Boolean @default(true)`
+- `peringatan Json`
+- `kualifikasiPelaksanaan Json`
+- `peralatanPerlengkapan Json`
+- `pencatatanPendataan Json`
+- `createdAt DateTime @default(now())`
+- `updatedAt DateTime @updatedAt`
+- `steps SopTemplateStep[]`
 
-Iteration 3 templates are system-owned and read-only through product APIs. No `ownerId` is added yet.
+The four JSON fields are arrays of strings. They are validated at the template mapper/service boundary before use. They avoid four extra template-only attachment tables while matching the existing DetailSOP lampiran collections during instantiation.
+
+System templates have no `ownerId` in Iteration 3 and have no product mutation endpoints.
 
 ### `SopTemplateStep`
 
-Represents one ordered procedure step in a template.
-
 Fields:
 
-- `templateStepId` UUID primary key;
-- `templateId` foreign key;
-- `order` integer;
-- `activity`;
-- `type` compatible with `JenisLangkahProsedur`;
-- `requirements`;
-- `output`;
-- `duration`;
-- `durationUnit` compatible with `SatuanWaktu`;
-- `notes`;
-- `actorKey` string identifying a logical actor role within the template;
-- optional yes/no target order references for decision steps.
+- `templateStepId String @id @default(uuid()) @db.Char(36)`
+- `templateId String @db.Char(36)`
+- `urutan Int`
+- `kegiatan String @db.VarChar(500)`
+- `jenis JenisLangkahProsedur @default(KEGIATAN)`
+- `kelengkapan String @db.VarChar(500)`
+- `keluaran String @db.VarChar(500)`
+- `waktu Int`
+- `satuanWaktu SatuanWaktu`
+- `keterangan String @db.VarChar(500)`
+- `actorName String @db.VarChar(255)`
+- `targetYaUrutan Int?`
+- `targetTidakUrutan Int?`
+- timestamps and relation to `SopTemplate`
 
-The template does not store workspace `pelaksanaId` values. Template actor keys/names are resolved at instantiation time against the target workspace.
+Constraints/indexes:
 
-## 7. Workspace Reuse Rules
+- `@@unique([templateId, urutan])`
+- `@@index([templateId])`
 
-Auto-fill must be deterministic and conservative.
+Template actors are represented by `actorName` on steps. The unique actor list and swimlane order are derived from first occurrence in ascending step order. An actor that has no procedure step is out of scope for system templates in Iteration 3.
 
-For template actors:
+Decision targets reference template step order, not database IDs. During instantiation they are remapped to newly created `langkahSopId` values.
 
-1. normalize the template actor display name for lookup using the same case/whitespace rules adopted by the workspace pelaksana service;
-2. reuse an existing `Pelaksana` in the target workspace when the name matches;
-3. otherwise create the missing workspace `Pelaksana`;
-4. attach resolved actors as `DetailSOPPelaksana` in template order;
-5. create each `LangkahSOP` using the resolved `pelaksanaId`.
+## 7. Deterministic Workspace Reuse Rules
 
-This behavior is explicitly shown before confirmation so the user knows which actors will be reused or added.
+For each unique `actorName` derived from the template:
 
-Regulations (`Peraturan`) are not auto-attached in Iteration 3. The existing user regulation library remains available in the editor. This prevents a deterministic template from making legal assumptions that may be incorrect for a specific SOP.
+1. trim leading/trailing whitespace;
+2. compare against target workspace `Pelaksana.nama` using the same normalization used by the existing pelaksana service/repository; if the current service has no centralized normalization helper, extract one only for the touched path rather than refactoring unrelated code;
+3. reuse a matching workspace actor;
+4. otherwise create exactly one missing workspace actor;
+5. attach resolved actors as `DetailSOPPelaksana` in first-use order;
+6. create each `LangkahSOP` with the resolved actor ID.
 
-## 8. Server Architecture
+The preview endpoint uses the same resolver logic in read-only mode so preview and creation cannot disagree by design.
 
-Add a focused template module rather than expanding unrelated catalog responsibilities.
+`Peraturan` records are never auto-attached in Iteration 3. They remain available through the existing editor.
 
-Suggested boundary:
+## 8. Server Boundaries
 
-- `sop/template/sop-template.controller.ts`
-- `sop/template/sop-template.service.ts`
-- `sop/template/sop-template.repository.ts`
-- DTOs/mappers colocated under the template module.
+Add a focused template submodule under the existing SOP module:
 
-Responsibilities:
+- `server/src/modules/sop/template/sop-template.controller.ts`
+- `sop-template.service.ts`
+- `sop-template.repository.ts`
+- template DTOs/mappers/specs beside them.
 
-### Template repository
+The repository lists/fetches active templates and performs the instantiation transaction. The service owns workspace authorization, template availability validation, preview classification, duplicate-number error mapping, and orchestration.
 
-- list active system templates;
-- fetch one active template with ordered steps;
-- expose the minimum data required by the service;
-- persist no user mutation API.
+The existing `SopCatalogService.createForPenyusun` remains the canonical blank creation path. A small shared internal helper may be extracted only if needed to avoid duplicating creation invariants; Iteration 3 must not refactor the whole catalog.
 
-### Template service
+## 9. Controller-Relative API Contract
 
-- assert workspace ownership through the existing `WorkspaceService`;
-- validate template availability;
-- build a creation plan/preview describing actors to reuse/create;
-- instantiate a draft through one transaction;
-- translate template decision targets from template step order/IDs to newly created `LangkahSOP` IDs.
+The application already mounts SOP routes under `@Controller('sop')`; therefore the new controller-relative routes are:
 
-### SOP catalog integration
+### `GET /sop/templates`
 
-The existing blank creation path remains owned by `SopCatalogService.createForPenyusun`.
+Returns active template summaries:
 
-Template creation may share a small internal draft-creation primitive with the catalog repository/service if duplication appears, but the iteration must not refactor the entire catalog merely to introduce templates.
-
-## 9. API Contract
-
-Minimum API surface:
-
-### `GET /api/sop/templates`
-
-Returns active template summaries.
-
-Each item includes:
-
-- `templateId`;
-- `key`;
-- `name`;
-- `description`;
-- `version`;
+- `templateId`, `key`, `name`, `description`, `version`;
 - `stepCount`;
-- actor names.
+- ordered unique `actorNames`.
 
-### `GET /api/sop/templates/:templateId/preview?workspaceId=...`
+### `GET /sop/templates/:templateId/preview?workspaceId=<uuid>`
 
-Returns the deterministic instantiation preview for the owned workspace:
+Requires authentication and owned workspace. Returns:
 
 - template summary;
-- actors to reuse;
-- actors to create;
+- `actorsToReuse`;
+- `actorsToCreate`;
 - step count;
-- lampiran defaults that will be copied.
+- non-empty lampiran defaults.
 
 No mutation occurs.
 
-### `POST /api/sop/templates/:templateId/create`
+### `POST /sop/templates/:templateId/create`
 
 Body:
 
@@ -243,151 +182,125 @@ Body:
 - `nomorSop`;
 - `namaLembaga`.
 
-Behavior:
+Returns the newly created SOP/catalog identity needed for navigation. It reuses current conflict semantics for duplicate SOP numbers and current non-disclosing ownership behavior for inaccessible workspaces.
 
-- verify authenticated workspace ownership;
-- verify template active;
-- instantiate atomically;
-- return the same catalog/workbench-friendly identity shape used by current creation/navigation.
-
-Blank creation continues to use the existing endpoint/contract.
+Blank creation continues through the existing `POST /sop` contract.
 
 ## 10. Transactional Instantiation
 
-Template instantiation must be all-or-nothing.
+One Prisma transaction performs all mutation:
 
-Within a single Prisma transaction:
+1. validate template integrity before writes;
+2. create `SOP` with `DRAFT` status;
+3. create initial `DetailSOP` version 1;
+4. resolve/reuse/create required workspace `Pelaksana` rows;
+5. create ordered `DetailSOPPelaksana` rows;
+6. materialize each non-empty template lampiran string into the matching existing lampiran table;
+7. create all `LangkahSOP` rows first with decision references unset;
+8. build `template urutan -> new langkahSopId` map;
+9. update `langkahSelanjutnyaYaId` / `langkahSelanjutnyaTidakId` using that map;
+10. return the created draft identity.
 
-1. create `SOP` with `DRAFT` status;
-2. create initial `DetailSOP` version 1;
-3. resolve/reuse/create required workspace `Pelaksana` records;
-4. create `DetailSOPPelaksana` rows in deterministic order;
-5. copy template lampiran defaults;
-6. create procedure steps without decision references first;
-7. build a map from template step identity/order to new `langkahSopId`;
-8. update decision yes/no references using that map;
-9. leave Flowchart/BPMN configuration to existing default rendering behavior unless the template explicitly requires a supported deterministic configuration later.
+Any error rolls the transaction back, including actors created solely by this operation. No partial SOP is allowed.
 
-On any failure the transaction rolls back, including newly created actors. The user must never receive a partially populated SOP.
+Flowchart/BPMN config is not stored in templates in Iteration 3. Existing default rendering derives diagrams from the generated steps; users may edit diagram configuration afterward through the current editor.
 
-## 11. Template Seed Strategy
+## 11. Template Seed Contract
 
-The migration creates the template tables. Template content is inserted through an idempotent production-safe seed/bootstrap mechanism, not by destructive database reset.
+The migration is additive and creates only the new template tables/indexes/foreign keys.
 
-Initial template set is deliberately small:
+System template data is installed through an idempotent production-safe upsert seed/bootstrap path with stable `key` values. Re-running deployment must not duplicate templates or steps. Updating a template definition affects future creations only; existing SOPs are never rewritten.
 
-1. `Administrasi Umum`;
-2. `Pengelolaan Dokumen`;
-3. `Pelayanan`.
+Initial template keys:
 
-A blank SOP is not stored as a template because the existing blank creation path is already the canonical implementation.
+1. `administrasi-umum`
+2. `pengelolaan-dokumen`
+3. `pelayanan`
 
-Seed identifiers/keys must be stable so future releases can update system templates without duplicating them. Existing user SOP drafts are never rewritten when a template definition changes.
+`SOP Kosong` is not persisted as a template because the existing blank creation path is already canonical.
 
-## 12. Client Architecture
+## 12. Client Boundaries
 
-The client adds a creation modal/page layer around the current workspace catalog. It does not alter the editor architecture.
+Add only a creation layer around the workspace catalog:
 
-Suggested components:
+- source selector (`SOP Kosong` / `Dari Template`);
+- active template list;
+- preview panel;
+- shared identity fields;
+- template-create query/mutation hooks.
 
-- source selection (`Kosong` / `Dari Template`);
-- template catalog cards/list;
-- template preview summary;
-- shared identity form fields used by both blank and template creation;
-- creation mutation hook.
+The editor itself is not forked or redesigned. After creation, the same existing route/components own all authoring.
 
-The UI must clearly distinguish "template suggestion" from actual saved SOP data. Nothing is written until the user confirms creation.
-
-After success, navigation enters the existing detail/workbench route and all existing components take over.
+The UI must label reuse/create actor information as a preview and must not imply anything has been saved before confirmation.
 
 ## 13. Error Handling
 
-Expected product errors:
+Expected behavior:
 
-- template not found/inactive -> 404-like user message;
-- workspace not owned -> same non-disclosing ownership behavior as current workspace/SOP APIs;
-- duplicate SOP number -> current conflict semantics reused;
-- actor/template integrity problem -> creation fails and transaction rolls back;
-- network/server failure -> creation dialog remains recoverable and does not claim a draft was created.
+- missing/inactive template: not-found response;
+- inaccessible workspace: same non-disclosing behavior as existing workspace/SOP APIs;
+- duplicate SOP number: existing conflict message semantics;
+- malformed seeded template or invalid decision target: fail before mutation where possible, otherwise rollback transaction;
+- network/server failure: keep the creation surface recoverable and do not navigate or claim success.
 
-The client should invalidate workspace SOP/template queries only after confirmed success.
+Queries are invalidated only after confirmed creation.
 
-## 14. Testing Strategy
-
-Implementation uses TDD.
+## 14. TDD and Verification
 
 ### Server unit tests
 
-Cover:
-
-- active template listing;
-- ownership enforcement;
-- preview actor reuse/create classification;
-- inactive/missing template;
-- duplicate SOP number mapping;
-- decision-target remapping;
-- no regulation auto-attachment;
-- rollback/error propagation contract.
+Prove active listing, ownership, preview reuse/create classification, missing/inactive template handling, duplicate number mapping, template JSON validation, decision-target validation/remapping, and no regulation auto-attachment.
 
 ### Database integration tests
 
-Use real MySQL + Prisma migration history to prove:
+Against real MySQL + migration history prove:
 
-- migration applies from current production baseline;
-- seed is idempotent;
-- existing workspace actor is reused;
+- additive migration applies from the current production baseline;
+- seed/upsert is idempotent;
+- matching actor is reused;
 - missing actor is created once;
-- full template graph is persisted correctly;
-- decision references point only to newly created steps;
-- failure leaves no partial SOP/DetailSOP/actor rows;
-- blank creation behavior remains unchanged.
+- template lampiran/steps/swimlanes persist correctly;
+- decision references point only to the newly created detail's steps;
+- forced failure leaves no partial SOP/detail/new actor;
+- blank creation remains unchanged.
 
 ### Client tests
 
-Cover:
+Prove source selection, template loading states, preview classification display, confirmation payload, success navigation, error recovery, and blank creation regression.
 
-- source selection;
-- template loading/empty/error states;
-- preview of reuse/create actors;
-- confirmation payload;
-- navigation to existing editor after success;
-- blank creation regression.
+### Playwright acceptance
 
-### Playwright acceptance journey
+Add one template journey:
 
-Add one focused journey:
+`Login -> Workspace -> Buat SOP -> Dari Template -> Preview -> Create -> Existing Editor -> verify prefill -> edit -> autosave -> reload -> Flowchart/BPMN -> Complete -> Create New Version`.
 
-`Login -> Workspace -> Buat SOP -> Dari Template -> preview -> create -> existing editor -> verify prefilled metadata/steps -> edit -> autosave -> reload -> verify Flowchart/BPMN -> Complete -> Create New Version`.
+The existing blank-SOP MVP journey remains mandatory.
 
-The existing MVP blank-SOP journey remains mandatory and must stay green.
+### Production verification
 
-## 15. Migration and Release Safety
+Existing production Compose checks remain mandatory, including migration deploy/idempotence, persistence, readiness, backup, and restore.
 
-This iteration adds schema but must be additive only:
+## 15. Migration and Merge Safety
 
-- create new template tables/indexes/foreign keys;
-- do not alter or delete existing authoring tables;
-- do not rewrite existing SOP data;
-- migration must pass the existing production Compose migration/idempotence checks;
-- backup/restore behavior from Iteration 2 remains mandatory.
+This is an additive schema change only. It must not drop/alter current authoring tables or rewrite existing SOP data.
 
-Because this introduces a production migration, final merge requires explicit review under repository high-risk rules even when CI is green.
+Because the iteration introduces a production migration, final merge is high-risk under `AGENTS.md`: all tests and mandatory CI must be green, but merge still requires explicit review rather than automatic merge.
 
 ## 16. Acceptance Criteria
 
 Iteration 3 is complete only when:
 
-1. the three initial system templates are available after a fresh and existing-database deployment;
-2. a user can create a blank SOP exactly as before;
-3. a user can inspect a template before mutation;
-4. template creation reuses matching workspace actors and creates only missing actors;
-5. generated SOP content is a normal editable `DRAFT`;
-6. no regulations are silently attached;
-7. template creation is transactional and cannot leave a partial SOP;
-8. existing editor, autosave, Flowchart, BPMN, completion, version cloning, print, and PDF continue to work;
-9. server/client tests, database integration, existing MVP E2E, new template E2E, and production Compose checks are green;
-10. implementation documentation explains the deterministic auto-fill boundary and explicitly defers AI assistance.
+1. all three system templates are available after fresh and existing-database deployment;
+2. blank SOP creation behaves exactly as before;
+3. template preview performs no writes;
+4. preview and creation classify actors consistently;
+5. matching workspace actors are reused and only missing actors are created;
+6. template creation is all-or-nothing;
+7. generated content is an ordinary editable `DRAFT`;
+8. regulations are never silently attached;
+9. existing editor/autosave/Flowchart/BPMN/completion/versioning/print/PDF remain green;
+10. server, client, DB integration, blank MVP E2E, template E2E, and production Compose verification are green.
 
 ## 17. Deferred Iteration 4
 
-After deterministic Smart Template & Auto-Fill is proven, a separate iteration may add AI-assisted drafting. AI output should be treated as suggestions that require user confirmation and should build on the exact same normal `DRAFT` model rather than introducing a parallel editor or lifecycle.
+AI-assisted drafting may be designed only after this deterministic creation path is complete. Any future AI output should remain a user-reviewed suggestion that ultimately produces/updates the same normal `DRAFT`, not a parallel lifecycle.
