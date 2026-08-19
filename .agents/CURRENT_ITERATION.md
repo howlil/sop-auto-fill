@@ -1,11 +1,12 @@
 # Current Iteration
 
 - **Iteration:** `4-ai-assisted-drafting`
-- **Status:** `DESIGN_SPEC_REVIEW`
+- **Status:** `IMPLEMENTING`
 - **Working branch:** `feat/ai-assisted-drafting`
+- **Pull request:** `#6` (draft)
 - **Goal:** menambahkan AI-assisted drafting sebagai preview terstruktur yang tidak melakukan persistence sampai user mengonfirmasi, lalu membuat SOP `DRAFT` biasa dan melanjutkan ke editor existing.
 - **Design spec:** `.agents/plans/2026-08-20-ai-assisted-drafting-design.md`
-- **Implementation plan:** belum dibuat; implementation tetap terkunci sampai design spec direview.
+- **Implementation plan:** `.agents/plans/2026-08-20-ai-assisted-drafting-implementation.md`
 
 ## Previous Iteration
 
@@ -13,7 +14,9 @@ Iteration 3 `smart-template-auto-fill` sudah squash-merged ke `master` melalui P
 
 ## User-Approved Direction
 
-User secara eksplisit menyetujui dimulainya Iteration 4 dengan arah berikut:
+User sudah mereview arah design dan pada 2026-08-20 memberi approval eksplisit untuk melanjutkan implementasi Iteration 4.
+
+Arah yang dikunci:
 
 - jalur baru `Dengan AI` ditambahkan di samping `SOP Kosong` dan `Dari Template`;
 - user mendeskripsikan proses dalam bahasa natural;
@@ -29,22 +32,23 @@ User secara eksplisit menyetujui dimulainya Iteration 4 dengan arah berikut:
 - tidak ada approval/evaluation/TTE/public archive/OPD roles/WhatsApp yang dikembalikan;
 - Iteration 4 tidak menambah Prisma migration atau persisted AI history/job.
 
-## Design Decisions Locked for Review
+## Implementation Invariants
 
 1. Generation endpoint melakukan zero application DB writes.
 2. Confirmation endpoint revalidates proposal dan current workspace actor state sebelum transaction.
 3. Existing deterministic actor matching/reuse rules tetap digunakan.
-4. Template dan AI creation akan memakai satu shared transactional draft-instantiation boundary agar invariants tidak diduplikasi.
+4. Template dan AI creation memakai satu shared transactional draft-instantiation boundary agar invariants tidak diduplikasi.
 5. OpenAI production adapter menggunakan Responses API strict Structured Outputs, backend-only credentials, no tools/retrieval, dan `store: false`.
 6. Model ID ditentukan runtime melalui `OPENAI_MODEL`, bukan hard-coded dalam product logic.
 7. `AI_DRAFT_PROVIDER` default `disabled`, sehingga aplikasi tetap dapat boot/deploy tanpa AI credential.
 8. Preview AI bersifat read-only pada Iteration 4; fine-grained editing dilakukan setelah confirmation melalui editor existing.
+9. Semua production behavior dikerjakan TDD: failing test harus ada dan diverifikasi sebelum implementation yang membuatnya hijau.
 
-## Execution Lock
+## Execution State
 
-Saat status `DESIGN_SPEC_REVIEW`, perubahan yang diizinkan hanya review/koreksi design spec dan execution-lock documentation. Jangan membuat implementation plan atau code AI sampai design spec direview dan disetujui.
+Implementation plan sudah disetujui untuk dieksekusi inline pada branch/PR #6 yang sama. Lakukan task secara berurutan, simpan bukti RED/GREEN dari CI, dan jangan memperluas scope di luar design spec.
 
-Setelah design spec disetujui, langkah berikutnya adalah membuat implementation plan berbasis TDD pada branch/PR yang sama, kemudian baru implementation dimulai.
+Status hanya boleh dipindahkan ke `REVIEW_READY` setelah server, client, E2E, dan production-compose mandatory CI hijau dan final review tidak menemukan blocker.
 
 ## Transition Rule
 
