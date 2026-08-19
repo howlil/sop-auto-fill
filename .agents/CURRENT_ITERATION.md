@@ -1,14 +1,15 @@
 # Current Iteration
 
 - **Iteration:** `3-smart-template-auto-fill`
-- **Status:** `DESIGN_REVIEW`
+- **Status:** `ACTIVE`
 - **Working branch:** `feat/smart-template-auto-fill`
 - **Goal:** menambahkan jalur pembuatan SOP berbasis system template dan reusable workspace data tanpa mengganti editor, autosave, Flowchart/BPMN, versioning, print, atau PDF yang sudah stabil.
 - **Design spec:** `.agents/plans/2026-08-18-smart-template-auto-fill-design.md`
+- **Implementation plan:** `.agents/plans/2026-08-19-smart-template-auto-fill-implementation.md`
 
 ## User-Approved Direction
 
-User secara eksplisit meminta Iteration 3 dijalankan setelah menyetujui arah berikut:
+User secara eksplisit meminta Iteration 3 dilanjutkan ke implementasi dengan arah berikut:
 
 - `Buat SOP` mempertahankan opsi SOP kosong;
 - jalur baru `Dari Template` menghasilkan SOP `DRAFT` biasa;
@@ -21,7 +22,7 @@ User secara eksplisit meminta Iteration 3 dijalankan setelah menyetujui arah ber
 
 ## Current Gate
 
-Design sudah ditulis pada branch task dan sedang menunggu review desain sebelum implementation plan dan code dimulai.
+Implementation aktif pada PR #5 dengan TDD. Kerjakan schema/migration/seed, server template API, client creation flow, integration/Playwright regression, dan production verification pada branch yang sama.
 
 Karena Iteration 3 menambahkan migration produksi, final merge termasuk kategori high-risk sesuai `AGENTS.md`: seluruh acceptance/mandatory CI harus hijau dan merge tetap membutuhkan explicit review.
 
