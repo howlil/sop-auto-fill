@@ -46,6 +46,47 @@ export interface SopTemplateCreateIdentity {
   status: "DRAFT";
 }
 
+export interface AiDraftStep {
+  urutan: number;
+  kegiatan: string;
+  jenis: "AWAL_AKHIR" | "KEGIATAN" | "KEPUTUSAN";
+  kelengkapan: string;
+  keluaran: string;
+  waktu: number;
+  satuanWaktu: "m" | "h" | "d" | "w" | "mo" | "y";
+  keterangan: string;
+  actorName: string;
+  targetYaUrutan: number | null;
+  targetTidakUrutan: number | null;
+}
+
+export interface AiDraftProposal {
+  suggestedTitle: string;
+  peringatan: string[];
+  kualifikasiPelaksanaan: string[];
+  peralatanPerlengkapan: string[];
+  pencatatanPendataan: string[];
+  actors: string[];
+  actorsToReuse: Array<{ name: string; pelaksanaId: string }>;
+  actorsToCreate: string[];
+  steps: AiDraftStep[];
+}
+
+export interface GenerateAiDraftInput {
+  workspaceId: string;
+  deskripsiProses: string;
+  tujuanProses?: string;
+  catatanTambahan?: string;
+}
+
+export interface CreateSopFromAiDraftInput {
+  workspaceId: string;
+  judul: string;
+  nomorSop: string;
+  namaLembaga: string;
+  proposal: AiDraftProposal;
+}
+
 export interface CreateWorkspaceSopInput {
   workspaceId: string;
   judul: string;
@@ -78,4 +119,13 @@ export const workspaceSopApi = {
       `/sop/templates/${encodeURIComponent(templateId)}/create`,
       input,
     ),
+  aiDraftAvailability: () =>
+    apiClient.get<ApiSuccessResponse<{ enabled: boolean }>>("/sop/ai-drafts/availability"),
+  generateAiDraft: (input: GenerateAiDraftInput) =>
+    apiClient.post<ApiSuccessResponse<{ proposal: AiDraftProposal }>>(
+      "/sop/ai-drafts/generate",
+      input,
+    ),
+  createFromAiDraft: (input: CreateSopFromAiDraftInput) =>
+    apiClient.post<ApiSuccessResponse<SopTemplateCreateIdentity>>("/sop/ai-drafts/create", input),
 };
