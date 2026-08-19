@@ -31,6 +31,15 @@ mysql_block="$(sed -n '/^  mysql:$/,/^  [a-zA-Z0-9_-]*:$/p' "$tmp")"
 grep -q 'condition: service_healthy' "$tmp" || { echo "healthy dependency gating missing" >&2; exit 1; }
 grep -q '/api/health/ready' "$tmp" || { echo "backend readiness healthcheck missing" >&2; exit 1; }
 
+grep -q 'AI_DRAFT_PROVIDER: disabled' <<<"$backend_block" || {
+  echo "production AI drafting must default to disabled" >&2
+  exit 1
+}
+! grep -q 'AI_DRAFT_PROVIDER: fake' <<<"$backend_block" || {
+  echo "fake AI provider must never be used by production Compose" >&2
+  exit 1
+}
+
 grep -q 'source: mysql_data' "$tmp" || { echo "mysql_data source missing" >&2; exit 1; }
 grep -q 'target: /var/lib/mysql' "$tmp" || { echo "mysql persistence target missing" >&2; exit 1; }
 grep -q 'source: sop_pdf_data' "$tmp" || { echo "sop_pdf_data source missing" >&2; exit 1; }
