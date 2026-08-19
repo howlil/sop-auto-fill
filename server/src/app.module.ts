@@ -8,6 +8,7 @@ import { validateEnv } from './config/env.validation';
 import { AuthModule } from './modules/core/auth/auth.module';
 import { PeraturanModule } from './modules/core/peraturan/peraturan.module';
 import { SopAiDraftModule } from './modules/sop/ai-draft/sop-ai-draft.module';
+import { SopAiReviewModule } from './modules/sop/ai-review/sop-ai-review.module';
 import { SopCatalogModule } from './modules/sop/catalog/sop-catalog.module';
 import { SopDiagramModule } from './modules/sop/diagram/sop-diagram.module';
 import { PelaksanaModule } from './modules/sop/pelaksana/pelaksana.module';
@@ -33,6 +34,7 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
     WorkspaceModule,
     SopCatalogModule,
     SopAiDraftModule,
+    SopAiReviewModule,
     SopProsedurModule,
     SopDiagramModule,
     PeraturanModule,
