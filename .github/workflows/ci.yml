@@ -193,7 +193,6 @@ jobs:
 
       - name: Seed system templates twice and verify exact state
         run: |
-          pnpm --dir server exec ts-node --transpile-only prisma/seed.ts >/dev/null 2>&1 || true
           docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
           docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
           docker compose --env-file .env.production.ci exec -T mysql \
