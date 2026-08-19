@@ -12,10 +12,14 @@ function invalidTemplate(): never {
 }
 
 function stringArray(value: Prisma.JsonValue): string[] {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    return invalidTemplate();
+  if (!Array.isArray(value)) return invalidTemplate();
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') return invalidTemplate();
+    const trimmed = item.trim();
+    if (trimmed.length > 0) result.push(trimmed);
   }
-  return value.map((item) => item.trim()).filter((item) => item.length > 0);
+  return result;
 }
 
 export function normalizeActorName(name: string): string {

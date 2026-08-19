@@ -96,18 +96,37 @@ export class SopTemplateRepository {
         })),
       });
 
-      const lampiranWrites = [
-        [tx.lampiranPeringatan, params.template.peringatan],
-        [tx.lampiranKualifikasiPelaksanaan, params.template.kualifikasiPelaksanaan],
-        [tx.lampiranPeralatanPerlengkapan, params.template.peralatanPerlengkapan],
-        [tx.lampiranPencatatanPendataan, params.template.pencatatanPendataan],
-      ] as const;
-      for (const [delegate, values] of lampiranWrites) {
-        if (values.length > 0) {
-          await delegate.createMany({
-            data: values.map((teks) => ({ detailSopId: detail.detailSopId, teks })),
-          } as never);
-        }
+      if (params.template.peringatan.length > 0) {
+        await tx.lampiranPeringatan.createMany({
+          data: params.template.peringatan.map((teks) => ({
+            detailSopId: detail.detailSopId,
+            teks,
+          })),
+        });
+      }
+      if (params.template.kualifikasiPelaksanaan.length > 0) {
+        await tx.lampiranKualifikasiPelaksanaan.createMany({
+          data: params.template.kualifikasiPelaksanaan.map((teks) => ({
+            detailSopId: detail.detailSopId,
+            teks,
+          })),
+        });
+      }
+      if (params.template.peralatanPerlengkapan.length > 0) {
+        await tx.lampiranPeralatanPerlengkapan.createMany({
+          data: params.template.peralatanPerlengkapan.map((teks) => ({
+            detailSopId: detail.detailSopId,
+            teks,
+          })),
+        });
+      }
+      if (params.template.pencatatanPendataan.length > 0) {
+        await tx.lampiranPencatatanPendataan.createMany({
+          data: params.template.pencatatanPendataan.map((teks) => ({
+            detailSopId: detail.detailSopId,
+            teks,
+          })),
+        });
       }
 
       const stepIdByOrder = new Map<number, string>();
