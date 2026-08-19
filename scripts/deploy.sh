@@ -103,6 +103,9 @@ fi
 echo "Applying Prisma migrations..."
 "${COMPOSE[@]}" run --rm backend pnpm prisma migrate deploy
 
+echo "Seeding system SOP templates..."
+"${COMPOSE[@]}" run --rm backend node prisma/seed-runtime.cjs
+
 echo "Starting backend and frontend..."
 "${COMPOSE[@]}" up -d backend frontend
 if ! wait_service_healthy backend; then
