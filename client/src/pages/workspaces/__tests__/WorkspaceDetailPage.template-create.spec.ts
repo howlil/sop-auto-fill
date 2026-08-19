@@ -36,7 +36,7 @@ describe("workspace SOP template client contract", () => {
   });
 
   it("creation surface mempertahankan SOP kosong dan menyediakan jalur Dari Template", () => {
-    const source = readFileSync(new URL("../WorkspaceDetailPage.tsx", import.meta.url), "utf8");
+    const source = readFileSync("src/pages/workspaces/WorkspaceDetailPage.tsx", "utf8");
 
     expect(source).toContain("SOP Kosong");
     expect(source).toContain("Dari Template");
