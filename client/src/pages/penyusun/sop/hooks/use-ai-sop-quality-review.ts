@@ -31,6 +31,10 @@ export function useAiSopQualityReview(
   const [review, setReview] = useState<SopQualityReviewResponse | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const previousFingerprintRef = useRef(contentFingerprint)
+  const latestFingerprintRef = useRef(contentFingerprint)
+  const latestDetailSopIdRef = useRef(detailSopId)
+  latestFingerprintRef.current = contentFingerprint
+  latestDetailSopIdRef.current = detailSopId
 
   useEffect(() => {
     let cancelled = false
@@ -75,7 +79,17 @@ export function useAiSopQualityReview(
         return
       }
 
-      const response = await workspaceSopApi.reviewAiSop(detailSopId)
+      const requestedFingerprint = latestFingerprintRef.current
+      const requestedDetailSopId = detailSopId
+      const response = await workspaceSopApi.reviewAiSop(requestedDetailSopId)
+      if (
+        latestFingerprintRef.current !== requestedFingerprint ||
+        latestDetailSopIdRef.current !== requestedDetailSopId
+      ) {
+        setReview(null)
+        setError(new Error('SOP berubah selama review AI. Simpan perubahan lalu jalankan review ulang.'))
+        return
+      }
       setReview(response.data)
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error('Review AI gagal dijalankan.'))
