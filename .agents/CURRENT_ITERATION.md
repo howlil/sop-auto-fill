@@ -3,7 +3,7 @@
 - **Iteration:** `5-ai-sop-quality-review`
 - **Status:** `DESIGN_SPEC_REVIEW`
 - **Working branch:** `feat/ai-sop-quality-review`
-- **Pull request:** belum dibuat
+- **Pull request:** `#7` (draft, design-only)
 - **Goal:** menambahkan AI-assisted quality review sebagai evaluasi transient terhadap snapshot SOP `DRAFT` yang sudah tersimpan, tanpa mutation otomatis dan tanpa persisted AI review history.
 - **Design spec:** `.agents/plans/2026-08-20-ai-sop-quality-review-design.md`
 - **Implementation plan:** belum dibuat; blocked sampai written design spec direview dan disetujui user.
@@ -26,7 +26,7 @@ Arah yang dikunci:
 - findings berfokus pada process structure, actor responsibility, input/output continuity, decision routing, clarity, supporting fields, time plausibility, dan completeness signals;
 - AI review bersifat advisory dan bukan approval, completion gate, legal compliance score, atau regulatory certification;
 - user memperbaiki SOP secara manual melalui editor existing dan autosave existing;
-- post-review edit membuat hasil lama stale atau dibersihkan;
+- post-review edit membersihkan hasil review lama agar finding stale tidak dianggap masih berlaku;
 - tidak ada automatic fix/write-back pada Iteration 5;
 - tidak ada regulation lookup, web/file search, RAG, approval/evaluation/TTE/public archive, collaboration, model settings UI, atau generic chat;
 - tidak ada Prisma migration, persisted AI review/history/job, atau background queue;
@@ -37,17 +37,17 @@ Arah yang dikunci:
 1. Browser hanya mengirim target `detailSopId`; backend memuat review snapshot dari database.
 2. Ownership dan status `DRAFT` diverifikasi server-side sebelum provider invocation.
 3. Review path tidak membuat, mengubah, atau menghapus application rows.
-4. Actor IDs dan internal step IDs tidak dikirim ke provider; provider menerima human-readable actor names dan step order references.
+4. Provider input tidak mengandung application DB IDs, termasuk `detailSopId`, actor IDs, internal step IDs, workspace ID, atau user ID; provider menerima human-readable content dan step order references.
 5. Provider output diperlakukan sebagai untrusted input dan divalidasi terhadap snapshot yang sama.
 6. Invalid actor/step references pada finding menolak provider output, bukan diteruskan sebagai dangling UI state.
 7. Review result transient dan tidak menjadi completion prerequisite.
 8. Existing editor, autosave, Flowchart/BPMN, PDF, completion, dan versioning tetap berfungsi ketika AI review disabled/gagal.
 9. Draft-generation provider contract Iteration 4 tidak di-overload; quality review memakai provider interface terpisah.
-10. OpenAI production adapter tetap backend-only, `store: false`, strict structured output, no tools/retrieval, bounded timeout, dan sanitized errors.
+10. OpenAI production adapter tetap backend-only, `store: false`, strict structured output, no tools/retrieval, bounded timeout `AI_REVIEW_TIMEOUT_MS`, dan sanitized errors.
 
 ## Execution State
 
-Design spec sudah ditulis pada branch ini dan menunggu review user.
+Design spec sudah ditulis dan self-reviewed pada branch/PR #7. Self-review memperjelas dua boundary: seluruh application DB IDs dihapus dari provider input, dan AI review memakai timeout config terpisah agar tidak mengubah kontrak Iteration 4.
 
 Selama status `DESIGN_SPEC_REVIEW`:
 
