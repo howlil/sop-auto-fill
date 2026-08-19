@@ -1,12 +1,12 @@
 # Current Iteration
 
 - **Iteration:** `5-ai-sop-quality-review`
-- **Status:** `DESIGN_SPEC_REVIEW`
+- **Status:** `IMPLEMENTATION_PLAN_READY`
 - **Working branch:** `feat/ai-sop-quality-review`
-- **Pull request:** `#7` (draft, design-only)
+- **Pull request:** `#7` (draft)
 - **Goal:** menambahkan AI-assisted quality review sebagai evaluasi transient terhadap snapshot SOP `DRAFT` yang sudah tersimpan, tanpa mutation otomatis dan tanpa persisted AI review history.
 - **Design spec:** `.agents/plans/2026-08-20-ai-sop-quality-review-design.md`
-- **Implementation plan:** belum dibuat; blocked sampai written design spec direview dan disetujui user.
+- **Implementation plan:** `.agents/plans/2026-08-20-ai-sop-quality-review-implementation.md`
 
 ## Previous Iteration
 
@@ -14,14 +14,14 @@ Iteration 4 `ai-assisted-drafting` sudah squash-merged ke `master` melalui PR #6
 
 ## User-Approved Direction
 
-Pada 2026-08-20 user menyetujui arah Iteration 5 `ai-sop-quality-review` setelah membandingkan tiga opsi lanjutan: AI quality review, AI inline rewrite, dan workspace collaboration.
+Pada 2026-08-20 user menyetujui arah Iteration 5 `ai-sop-quality-review`, kemudian menyetujui written design spec dengan instruksi eksplisit untuk melanjutkan.
 
 Arah yang dikunci:
 
 - quality review berada di existing SOP editor, bukan page/editor baru;
 - target review adalah ordinary editable SOP `DRAFT`;
 - review memakai server-authoritative persisted snapshot, bukan arbitrary SOP JSON dari browser;
-- client menunggu autosave settled sebelum memulai review sehingga tidak sengaja mereview state yang diketahui stale;
+- client memastikan autosave header dan prosedur benar-benar berhasil sebelum memulai review;
 - AI menghasilkan findings transient `ERROR | WARNING | SUGGESTION` yang menunjuk lokasi spesifik pada SOP;
 - findings berfokus pada process structure, actor responsibility, input/output continuity, decision routing, clarity, supporting fields, time plausibility, dan completeness signals;
 - AI review bersifat advisory dan bukan approval, completion gate, legal compliance score, atau regulatory certification;
@@ -45,19 +45,34 @@ Arah yang dikunci:
 9. Draft-generation provider contract Iteration 4 tidak di-overload; quality review memakai provider interface terpisah.
 10. OpenAI production adapter tetap backend-only, `store: false`, strict structured output, no tools/retrieval, bounded timeout `AI_REVIEW_TIMEOUT_MS`, dan sanitized errors.
 
+## Planning Review
+
+Implementation plan sudah ditulis dengan delapan task TDD: domain/schema, read-only snapshot repository, service/auth boundary, production provider/runtime, autosave/client hook, editor UI, genuine RED/GREEN E2E, dan final security/CI gate.
+
+Self-review implementation plan menemukan dan memperbaiki asumsi autosave yang tidak akurat. Existing header dan prosedur `flush()` menyimpan error ke state dan resolve; implementation plan sekarang mengubah resolved value secara backward-compatible menjadi `Promise<boolean>`. AI review hanya boleh memanggil backend ketika kedua flush menghasilkan `true`. Caller existing yang tidak membutuhkan result dapat tetap mengabaikan boolean.
+
+Implementation plan juga mengunci:
+
+- mapping repository konkret dari internal target IDs ke step order;
+- provider-safe mapper tanpa spread object yang dapat membawa DB IDs;
+- side-panel `AI Review` sebagai tab existing, bukan editor/panel kedua;
+- STEP finding membuka/scroll ke row prosedur melalui `data-sop-step-order`;
+- non-STEP finding kembali ke tab Edit tanpa membuat selector field palsu;
+- genuine RED E2E harus dijalankan sebelum `AI_REVIEW_PROVIDER=fake` diaktifkan pada CI;
+- production tetap default `AI_REVIEW_PROVIDER=disabled`.
+
 ## Execution State
 
-Design spec sudah ditulis dan self-reviewed pada branch/PR #7. Self-review memperjelas dua boundary: seluruh application DB IDs dihapus dari provider input, dan AI review memakai timeout config terpisah agar tidak mengubah kontrak Iteration 4.
+Written design spec sudah approved. Implementation plan sudah ditulis dan self-reviewed. Belum ada production code, test implementation, migration, atau UI behavior Iteration 5 yang ditambahkan.
 
-Selama status `DESIGN_SPEC_REVIEW`:
+Selama status `IMPLEMENTATION_PLAN_READY`:
 
-- boleh memperbaiki atau memperjelas design spec;
-- boleh melakukan read-only inspection untuk menjawab pertanyaan design;
-- **jangan** membuat implementation plan;
-- **jangan** menulis production code, test implementation, migration, atau UI behavior;
-- **jangan** memperluas scope menjadi inline AI correction atau subsystem lain.
-
-Setelah user menyetujui written spec secara eksplisit, transisi berikutnya adalah membuat implementation plan TDD dengan skill `writing-plans`, lalu mengubah status execution lock sesuai tahap implementasi.
+- implementation harus mengikuti plan pada branch dan PR #7 yang sama;
+- gunakan TDD RED/GREEN per task;
+- jangan membuat branch atau PR baru untuk Iteration 5;
+- jangan memperluas scope menjadi auto-fix, compliance retrieval, collaboration, atau subsystem lain;
+- final state harus melewati full server/client/E2E/production-compose CI dan focused trust-boundary review;
+- karena Iteration 5 memperluas external AI provider/credential boundary, final squash merge tetap memerlukan approval user eksplisit setelah `REVIEW_READY`.
 
 ## Transition Rule
 
