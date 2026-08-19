@@ -25,6 +25,10 @@ const optionalUrl = z.preprocess(
   },
   z.string().url().optional(),
 );
+const aiProviderSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
+  z.enum(['disabled', 'openai', 'fake']).default('disabled'),
+);
 
 const envSchema = z
   .object({
@@ -53,27 +57,28 @@ const envSchema = z
       z.string().min(1).default('/app/storage/sop-pdf'),
     ),
 
-    AI_DRAFT_PROVIDER: z.preprocess(
-      (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
-      z.enum(['disabled', 'openai', 'fake']).default('disabled'),
-    ),
+    AI_DRAFT_PROVIDER: aiProviderSchema,
     AI_DRAFT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+    AI_REVIEW_PROVIDER: aiProviderSchema,
+    AI_REVIEW_TIMEOUT_MS: z.coerce.number().int().min(5000).max(60000).default(30000),
     OPENAI_API_KEY: optionalTrimmedString,
     OPENAI_MODEL: optionalTrimmedString,
   })
   .superRefine((data, ctx) => {
-    if (data.AI_DRAFT_PROVIDER === 'openai') {
+    const usesOpenAi =
+      data.AI_DRAFT_PROVIDER === 'openai' || data.AI_REVIEW_PROVIDER === 'openai';
+    if (usesOpenAi) {
       if (!data.OPENAI_API_KEY) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'OPENAI_API_KEY wajib ketika AI_DRAFT_PROVIDER=openai',
+          message: 'OPENAI_API_KEY wajib ketika provider AI openai digunakan',
           path: ['OPENAI_API_KEY'],
         });
       }
       if (!data.OPENAI_MODEL) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'OPENAI_MODEL wajib ketika AI_DRAFT_PROVIDER=openai',
+          message: 'OPENAI_MODEL wajib ketika provider AI openai digunakan',
           path: ['OPENAI_MODEL'],
         });
       }
@@ -86,6 +91,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: 'AI_DRAFT_PROVIDER=fake hanya diizinkan untuk test/development',
         path: ['AI_DRAFT_PROVIDER'],
+      });
+    }
+    if (data.AI_REVIEW_PROVIDER === 'fake') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'AI_REVIEW_PROVIDER=fake hanya diizinkan untuk test/development',
+        path: ['AI_REVIEW_PROVIDER'],
       });
     }
 
