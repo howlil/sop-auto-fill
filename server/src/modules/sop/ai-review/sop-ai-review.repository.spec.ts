@@ -90,10 +90,18 @@ const dbRow = {
   ],
 };
 
+function prismaOrderedDbRow() {
+  return {
+    ...dbRow,
+    swimlanes: [...dbRow.swimlanes].sort((a, b) => a.urutan - b.urutan),
+    langkahSOP: [...dbRow.langkahSOP].sort((a, b) => a.urutan - b.urutan),
+  };
+}
+
 describe('SopAiReviewRepository', () => {
   it('memuat dan memetakan snapshot persisted secara authoritative', async () => {
     const { repository, prisma } = makeRepository();
-    prisma.detailSOP.findUnique.mockResolvedValue(dbRow);
+    prisma.detailSOP.findUnique.mockResolvedValue(prismaOrderedDbRow());
 
     await expect(repository.findReviewContext('detail-1')).resolves.toEqual({
       ownerId: 'user-1',
@@ -145,8 +153,14 @@ describe('SopAiReviewRepository', () => {
           lampiranKualifikasiPelaksanaan: expect.any(Object),
           lampiranPeralatanPerlengkapan: expect.any(Object),
           lampiranPencatatanPendataan: expect.any(Object),
-          swimlanes: expect.objectContaining({ include: { pelaksana: true } }),
-          langkahSOP: expect.objectContaining({ include: { pelaksana: true } }),
+          swimlanes: expect.objectContaining({
+            orderBy: { urutan: 'asc' },
+            include: { pelaksana: true },
+          }),
+          langkahSOP: expect.objectContaining({
+            orderBy: { urutan: 'asc' },
+            include: { pelaksana: true },
+          }),
         }),
       }),
     );
@@ -161,7 +175,7 @@ describe('SopAiReviewRepository', () => {
 
   it('tidak menggunakan jalur mutation atau transaction', async () => {
     const { repository, prisma } = makeRepository();
-    prisma.detailSOP.findUnique.mockResolvedValue(dbRow);
+    prisma.detailSOP.findUnique.mockResolvedValue(prismaOrderedDbRow());
 
     await repository.findReviewContext('detail-1');
 
