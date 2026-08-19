@@ -9,6 +9,8 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f compose.yml)
 
 [[ -f compose.yml ]] || { echo "compose.yml missing" >&2; exit 1; }
 [[ -f "$ENV_FILE" ]] || { echo "$ENV_FILE missing" >&2; exit 1; }
+[[ -f server/prisma/seed-runtime.cjs ]] || { echo "production template seed runner missing" >&2; exit 1; }
+[[ -f server/prisma/system-template-seed.cjs ]] || { echo "system template seed module missing" >&2; exit 1; }
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
@@ -46,6 +48,7 @@ done
 grep -q 'git pull --ff-only' scripts/deploy.sh || { echo "deploy must use ff-only pull" >&2; exit 1; }
 grep -q 'scripts/backup.sh' scripts/deploy.sh || { echo "deploy must backup before migration" >&2; exit 1; }
 grep -q 'prisma migrate deploy' scripts/deploy.sh || { echo "deploy must run migrate deploy" >&2; exit 1; }
+grep -q 'seed-runtime.cjs' scripts/deploy.sh || { echo "deploy must seed system templates" >&2; exit 1; }
 grep -q 'api/health/ready' scripts/deploy.sh || { echo "deploy must verify backend readiness" >&2; exit 1; }
 grep -q 'BACKUP_RETENTION_DAYS' scripts/backup.sh || { echo "backup retention missing" >&2; exit 1; }
 grep -q -- '--yes' scripts/restore.sh || { echo "restore destructive confirmation missing" >&2; exit 1; }
