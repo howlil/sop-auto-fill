@@ -1,11 +1,14 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import type { Prisma } from '../../../generated/prisma';
+import { normalizeActorName } from '../draft/sop-draft-normalization';
 import type {
   SopTemplateDbRow,
   SopTemplateSummary,
   ValidatedTemplate,
   ValidatedTemplateStep,
 } from './sop-template.types';
+
+export { normalizeActorName } from '../draft/sop-draft-normalization';
 
 function invalidTemplate(): never {
   throw new InternalServerErrorException('Template sistem tidak valid');
@@ -20,10 +23,6 @@ function stringArray(value: Prisma.JsonValue): string[] {
     if (trimmed.length > 0) result.push(trimmed);
   }
   return result;
-}
-
-export function normalizeActorName(name: string): string {
-  return name.trim().toLocaleLowerCase('id-ID');
 }
 
 export function validateTemplate(row: SopTemplateDbRow): ValidatedTemplate {
