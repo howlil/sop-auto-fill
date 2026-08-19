@@ -74,7 +74,7 @@ The existing `Buat SOP` surface gains a third source:
 The AI path contains:
 
 1. a natural-language textarea named `Deskripsi proses`;
-2. optional context fields kept intentionally small:
+2. optional context fields:
    - `tujuanProses`;
    - `catatanTambahan`;
 3. a `Generate Draft` action;
@@ -99,20 +99,19 @@ The proposal preview is read-only in Iteration 4. If the proposal is unsuitable,
 
 No SOP, actor, detail, step, lampiran, or log row is written during generation.
 
-## 6. Canonical AI Draft Proposal
+## 6. Provider Output and Canonical Proposal
 
-The server converts provider output into one canonical internal structure before returning it to the client.
+The provider returns only generation content. Workspace reuse metadata is derived by the application.
+
+Provider output:
 
 ```ts
-type AiDraftProposal = {
+type AiDraftProviderOutput = {
   suggestedTitle: string;
   peringatan: string[];
   kualifikasiPelaksanaan: string[];
   peralatanPerlengkapan: string[];
   pencatatanPendataan: string[];
-  actors: string[];
-  actorsToReuse: Array<{ name: string; pelaksanaId: string }>;
-  actorsToCreate: string[];
   steps: Array<{
     urutan: number;
     kegiatan: string;
@@ -129,37 +128,47 @@ type AiDraftProposal = {
 };
 ```
 
-`actors`, `actorsToReuse`, and `actorsToCreate` are derived by the application after provider output validation. The provider is asked for `actorName` per step, not database IDs or workspace classification.
+After provider-output validation, the application derives:
 
-The provider is never allowed to generate database IDs.
+```ts
+type AiDraftProposal = AiDraftProviderOutput & {
+  actors: string[];
+  actorsToReuse: Array<{ name: string; pelaksanaId: string }>;
+  actorsToCreate: string[];
+};
+```
+
+`actors` are unique normalized actor names in first-use order. The provider is never asked to generate database IDs and never decides whether an actor already exists in the workspace.
 
 ## 7. Structural Validation Rules
 
-Provider structured output is necessary but not sufficient. The application performs domain validation after parsing.
+Provider Structured Outputs are necessary but not sufficient. The application performs domain validation after parsing and repeats the same validation at create time.
 
-Rules:
+Exact rules:
 
-1. `suggestedTitle` is trimmed and must contain 2-500 characters;
-2. there must be between 2 and 25 steps;
-3. step order must be unique, positive, contiguous, and normalized to `1..N` before persistence;
-4. every step requires non-empty `kegiatan`, `kelengkapan`, `keluaran`, `keterangan`, and `actorName` after trimming;
-5. `waktu` must be a positive integer within a bounded application limit;
-6. `satuanWaktu` must use the existing `SatuanWaktu` enum;
-7. `jenis` must use the existing `JenisLangkahProsedur` enum;
-8. actor names are normalized using the same actor-name normalization used by deterministic template creation;
+1. `suggestedTitle`: trimmed, 2-500 characters;
+2. step count: 2-25;
+3. `urutan`: unique positive integers and canonicalized to contiguous `1..N` while preserving ascending order;
+4. `kegiatan`, `kelengkapan`, `keluaran`, `keterangan`: trimmed, 1-500 characters each;
+5. `actorName`: trimmed, 1-255 characters;
+6. `waktu`: integer from 1 through 1,000,000;
+7. `satuanWaktu`: existing `SatuanWaktu` enum only;
+8. `jenis`: existing `JenisLangkahProsedur` enum only;
 9. duplicate actors after normalization collapse to one canonical actor in first-use order;
-10. decision targets must point to an existing step order;
-11. a `KEPUTUSAN` step must have meaningful routing: at least one target, and when both branches exist they may not point to the same step;
-12. non-decision steps must not carry `targetYaUrutan` or `targetTidakUrutan`;
-13. routing may loop to an earlier step because procedural correction loops are valid;
-14. lampiran arrays contain only trimmed non-empty strings and are capped to a small bounded count/length;
-15. output that violates the canonical contract is rejected as provider-invalid and is never persisted.
+10. `targetYaUrutan` and `targetTidakUrutan`, when non-null, must resolve to an existing original step order and are remapped after order canonicalization;
+11. `KEPUTUSAN` must have at least one non-null branch target;
+12. when a `KEPUTUSAN` has both targets, the two targets must differ;
+13. non-`KEPUTUSAN` steps must have both branch targets null;
+14. routing may point to an earlier step because correction loops are valid;
+15. each lampiran array contains 0-20 items;
+16. each lampiran item is trimmed, non-empty, and 1-500 characters;
+17. provider output with unknown keys, invalid enums, malformed routing, or values outside these limits is rejected and never persisted.
 
-The create endpoint runs the same canonical validation again. A client cannot bypass domain validation by altering a previously generated proposal.
+A client cannot bypass these rules by modifying a previously generated proposal because the create endpoint canonicalizes and validates again.
 
 ## 8. Provider Abstraction
 
-Add a provider-neutral server interface, for example:
+Add a provider-neutral server interface:
 
 ```ts
 interface AiDraftProvider {
@@ -172,28 +181,26 @@ Initial implementations:
 - `OpenAiDraftProvider`: production implementation;
 - `FakeAiDraftProvider`: deterministic test implementation.
 
-Application services depend only on `AiDraftProvider`, not directly on an SDK client.
-
-Provider selection is server configuration. The browser cannot choose a provider or model.
+Application services depend on `AiDraftProvider`, not directly on an SDK client. Provider selection is server configuration. The browser cannot choose a provider or model.
 
 ## 9. OpenAI Provider Contract
 
-The initial production adapter uses the OpenAI Responses API from the server. The official OpenAI SDK is preferred over hand-rolled browser/API calls.
+The initial production adapter uses the OpenAI Responses API from the backend with the official TypeScript/JavaScript SDK.
 
 Provider behavior:
 
 1. API key is loaded only from server environment configuration;
-2. model name is server-configurable through `OPENAI_MODEL` rather than hard-coded into product logic;
-3. the request uses Structured Outputs with a strict JSON schema matching the provider-output contract;
-4. `store: false` is used because the application does not need provider-side response state for this synchronous one-shot flow;
-5. no model tools are enabled in Iteration 4;
+2. model name comes from `OPENAI_MODEL`; product code does not hard-code a model ID;
+3. the request uses Responses API Structured Outputs with `type: json_schema` and strict schema adherence;
+4. `store: false` is set because this synchronous flow does not require provider-side response state;
+5. no tools are enabled;
 6. no web search, file search, function calling, or external retrieval is exposed to the model;
-7. provider calls use a bounded timeout;
-8. raw provider errors are not forwarded to clients;
-9. provider output is parsed and then passed through application domain validation;
-10. provider request IDs may be logged for operational diagnosis, but API keys and full prompts must not be written to ordinary application logs.
+7. provider calls use the configured bounded timeout;
+8. raw provider error bodies are never forwarded to the client;
+9. refusal, incomplete response, empty output, invalid JSON/schema output, or application-invalid output are handled as failed generation;
+10. provider request IDs may be logged for diagnosis, but API keys, full prompts, and full model responses are not written to ordinary application logs.
 
-The prompt instructs the model to draft a procedure from user-provided facts, avoid inventing legal/regulatory references, avoid inventing organization-specific identifiers, and return only the requested structured object.
+The prompt instructs the model to draft only from user-provided process facts, avoid inventing legal/regulatory references, avoid inventing organization-specific identifiers, and return only the requested structured object.
 
 ## 10. Prompt Input Boundary
 
@@ -208,16 +215,17 @@ The prompt instructs the model to draft a procedure from user-provided facts, av
 }
 ```
 
-Validation:
+Exact validation:
 
 - authenticated user must own `workspaceId`;
-- `deskripsiProses` is required, trimmed, and bounded in length;
-- optional fields are trimmed and bounded;
+- `deskripsiProses`: trimmed, required, 20-8,000 characters;
+- `tujuanProses`: trimmed, optional, maximum 2,000 characters;
+- `catatanTambahan`: trimmed, optional, maximum 4,000 characters;
 - empty optional values are omitted;
-- the server loads existing workspace actor names and includes them as reusable vocabulary/context;
-- database IDs are not sent to the provider.
+- the server loads workspace actor names ordered by name and sends at most 100 unique normalized names as reusable vocabulary/context;
+- database IDs are never sent to the provider.
 
-The request does not contain `nomorSop` or authoritative `namaLembaga`; those fields are supplied by the user only during confirmation.
+The request does not contain `nomorSop` or authoritative `namaLembaga`; those values are supplied by the user only during confirmation.
 
 ## 11. API Contract
 
@@ -229,9 +237,7 @@ Authenticated endpoint returning:
 { enabled: boolean }
 ```
 
-It does not expose API key status details, provider credentials, or model name.
-
-The UI uses this to disable generation gracefully when AI drafting is not configured while preserving blank/template creation.
+It exposes neither key configuration details nor model name. `enabled` is true only when the selected provider is operationally configured.
 
 ### `POST /sop/ai-drafts/generate`
 
@@ -245,7 +251,7 @@ Response:
 }
 ```
 
-This endpoint is read-only with respect to application persistence.
+This endpoint performs zero application database writes.
 
 ### `POST /sop/ai-drafts/create`
 
@@ -264,26 +270,26 @@ Body:
 Server behavior:
 
 1. assert workspace ownership;
-2. trim/validate identity fields;
+2. trim and validate identity fields using existing database limits;
 3. revalidate and canonicalize the proposal;
-4. re-resolve workspace actors from current database state, ignoring client-supplied reuse IDs as authoritative input;
-5. instantiate the draft in one transaction;
-6. return minimal SOP/detail identity for navigation.
+4. ignore client-supplied `pelaksanaId` values as authoritative input;
+5. re-resolve current workspace actors by normalized name so actor state may safely change between generation and confirmation;
+6. instantiate the draft in one transaction;
+7. return minimal `{ sopId, detailSopId, workspaceId, status }` identity for navigation.
 
 The create route does not call the model again.
 
 ## 12. Shared Draft Instantiation Boundary
 
-Iteration 3 already implements transactional creation from a template. AI creation needs the same invariants.
+Iteration 3 already implements transactional creation from a template. AI creation needs the same invariants. The transaction must not be duplicated.
 
-Instead of duplicating that transaction, extract a focused internal draft-instantiation boundary used by template creation and AI creation.
+Extract one focused internal draft-instantiation service used by template creation and AI creation, with no public controller.
 
-Suggested location:
+Preferred location:
 
-- `server/src/modules/sop/draft/sop-draft-instantiation.service.ts` or equivalent internal helper;
-- no public controller for this helper.
+`server/src/modules/sop/draft/sop-draft-instantiation.service.ts`
 
-Input is a canonical draft definition containing identity, lampiran, actors, steps, and decision routing.
+Input is a canonical draft definition containing identity, lampiran, ordered actor names, steps, and decision routing.
 
 It owns:
 
@@ -294,65 +300,71 @@ It owns:
 - lampiran creation;
 - two-pass procedure-step and decision-target creation;
 - initial edit-log creation;
-- transaction atomicity;
-- duplicate SOP-number error mapping at the caller/service boundary.
+- transaction atomicity.
 
-Blank SOP creation remains unchanged unless a tiny internal extraction is required for a directly shared invariant. Iteration 4 must not refactor unrelated catalog/editor logic.
+Duplicate SOP-number conflicts remain mapped by the calling template/AI service to the existing conflict response.
+
+Blank SOP creation remains unchanged. Iteration 4 must not refactor unrelated catalog/editor logic.
 
 ## 13. Server Module Boundaries
 
-Add a focused AI drafting submodule under SOP, for example:
+Add a focused AI drafting submodule:
 
 - `server/src/modules/sop/ai-draft/sop-ai-draft.controller.ts`
-- `sop-ai-draft.service.ts`
-- `sop-ai-draft.schema.ts`
-- `sop-ai-draft.mapper.ts`
-- `providers/ai-draft-provider.ts`
-- `providers/openai-draft.provider.ts`
-- `providers/fake-ai-draft.provider.ts`
+- `server/src/modules/sop/ai-draft/sop-ai-draft.service.ts`
+- `server/src/modules/sop/ai-draft/sop-ai-draft.schema.ts`
+- `server/src/modules/sop/ai-draft/sop-ai-draft.mapper.ts`
+- `server/src/modules/sop/ai-draft/providers/ai-draft-provider.ts`
+- `server/src/modules/sop/ai-draft/providers/openai-draft.provider.ts`
+- `server/src/modules/sop/ai-draft/providers/fake-ai-draft.provider.ts`
 - DTOs and specs colocated with the module.
 
 Responsibilities:
 
 - controller: transport/authenticated request boundary;
-- service: workspace authorization, provider availability, generation orchestration, workspace actor context, proposal canonicalization, create orchestration, error mapping;
+- service: workspace authorization, availability, provider orchestration, actor context, proposal canonicalization, confirmation orchestration, error mapping;
 - provider: external model request only;
-- schema/mapper: structured-output parsing and domain validation;
-- draft-instantiation helper: database mutation only after confirmation.
+- schema/mapper: provider-output parsing and domain validation;
+- draft-instantiation service: database mutation only after confirmation.
 
 No Prisma model or migration is added for AI drafting.
 
 ## 14. Client Boundaries
 
-Extend the existing workspace creation surface instead of adding a new page-level editor.
+Extend the existing workspace creation surface instead of adding a second editor page.
 
-`WorkspaceDetailPage` gains `CreateSource = 'blank' | 'template' | 'ai'`.
+`WorkspaceDetailPage` gains:
 
-AI state remains local/transient:
+```ts
+type CreateSource = 'blank' | 'template' | 'ai';
+```
 
-- input description/context;
+AI state is transient client state only:
+
+- description/context input;
+- availability state;
 - generation pending/error state;
 - generated proposal;
 - user identity fields.
 
-On successful create, navigate to the existing SOP editor exactly like template creation.
+On successful confirmation, navigate to the existing SOP editor exactly like template creation.
 
-When switching away from `Dengan AI`, transient AI proposal state is cleared so stale generated content cannot be accidentally confirmed later.
+Switching away from `Dengan AI` clears generated proposal state. Editing any generation input after a proposal exists also invalidates/clears that proposal, requiring regeneration before confirmation. This prevents stale preview confirmation.
 
 ## 15. Error Handling
 
-Map external and domain failures to stable application errors.
+Stable application mapping:
 
-- provider disabled: HTTP 503 with a user-safe message;
+- provider disabled or not configured: HTTP 503;
 - provider timeout/network failure: HTTP 503;
-- provider rate limit: HTTP 503 or 429 according to existing API error conventions, without leaking provider body;
-- provider refusal/incomplete/invalid structured output: HTTP 422 with a regenerate-oriented message;
+- upstream provider rate limit: HTTP 503 with a user-safe retry message;
+- provider refusal/incomplete/empty/invalid structured output: HTTP 422 with a regenerate-oriented message;
 - invalid user input: HTTP 400;
 - workspace not owned: existing authorization behavior;
-- duplicate SOP number during confirmation: existing conflict behavior;
+- duplicate SOP number during confirmation: existing HTTP conflict behavior;
 - transaction failure: no partial SOP data remains.
 
-Generation errors do not affect blank or template creation.
+No raw provider response/error body is returned to the client. Generation errors do not affect blank or template creation.
 
 ## 16. Security and Privacy
 
@@ -364,23 +376,24 @@ Generation errors do not affect blank or template creation.
 6. database IDs are excluded from provider input;
 7. automatic web/file retrieval is disabled;
 8. API logs must not contain secrets;
-9. ordinary application logs should record operational metadata, not full user prompts or full model responses;
-10. generation never bypasses existing workspace ownership checks;
+9. ordinary logs record operational metadata rather than full prompts or full responses;
+10. generation never bypasses workspace ownership checks;
 11. AI output never attaches regulations automatically;
-12. the user remains responsible for reviewing generated administrative content before completing the SOP.
+12. `store: false` is used for OpenAI Responses API calls;
+13. the user must review generated administrative content before completing the SOP.
 
 ## 17. Runtime Configuration
 
-Add server configuration with explicit validation:
+Add explicit server configuration validation:
 
-- `AI_DRAFT_PROVIDER=disabled|openai`;
-- `OPENAI_API_KEY` required only when `AI_DRAFT_PROVIDER=openai`;
-- `OPENAI_MODEL` required only when `AI_DRAFT_PROVIDER=openai`;
-- `AI_DRAFT_TIMEOUT_MS` optional with a safe bounded default.
+- `AI_DRAFT_PROVIDER=disabled|openai`, default `disabled`;
+- `OPENAI_API_KEY`, required and non-empty when provider is `openai`;
+- `OPENAI_MODEL`, required and non-empty when provider is `openai`;
+- `AI_DRAFT_TIMEOUT_MS`, optional integer from 5,000 through 60,000, default 30,000.
 
-Production example environment documentation is updated with placeholders only. No real credential is committed.
+If `AI_DRAFT_PROVIDER=openai` but required OpenAI configuration is missing, application startup fails configuration validation. With the default `disabled` value, the application boots without any OpenAI credential.
 
-The application must boot successfully with AI drafting disabled. This keeps the existing product deployable without an AI provider.
+Update `.env.production.example` with placeholders only. No real credential is committed. Provider credentials are runtime values and are not required while building container images.
 
 ## 18. Testing Strategy
 
@@ -388,42 +401,52 @@ The application must boot successfully with AI drafting disabled. This keeps the
 
 Cover:
 
-- DTO whitespace and length validation;
+- DTO whitespace and exact length validation;
 - availability behavior;
 - workspace ownership assertion;
-- prompt-context construction without database IDs;
+- actor-context cap and exclusion of database IDs;
 - strict provider-output parsing;
 - canonicalization and actor de-duplication;
+- step-order remapping;
 - invalid decision targets;
-- non-decision steps carrying branches;
-- maximum-step and maximum-field limits;
+- non-decision branches;
+- all field/count limits;
 - provider disabled/timeout/rate-limit/refusal mapping;
 - create-time revalidation;
-- actor state changed between generate and create;
+- changed actor state between generate and create;
 - transactional instantiation;
 - duplicate SOP-number conflict mapping.
 
 ### Provider tests
 
-Do not call a paid/live provider in mandatory CI.
+Mandatory CI never calls a paid/live provider.
 
-The fake provider returns deterministic structured output so tests prove application behavior independent of provider variability.
+`FakeAiDraftProvider` returns deterministic structured output so application behavior is independent of model variability.
 
-The OpenAI adapter is tested through a mocked SDK boundary for request shape, structured-output configuration, `store: false`, timeout/error mapping, and response parsing.
+`OpenAiDraftProvider` is tested behind a mocked official SDK boundary for:
+
+- Responses API request shape;
+- strict JSON-schema output format;
+- `store: false`;
+- no tools;
+- configured model/timeout;
+- refusal/incomplete/error mapping;
+- provider output parsing.
 
 ### Client tests
 
 Cover:
 
-- third creation source `Dengan AI`;
+- third source `Dengan AI`;
 - disabled/unavailable state;
 - generate payload;
 - read-only preview;
+- input change invalidates stale proposal;
 - regenerate behavior;
 - identity requirements;
 - final create payload;
 - navigation to existing editor;
-- switching source clears stale proposal state.
+- switching source clears proposal state.
 
 ### E2E acceptance
 
@@ -435,44 +458,46 @@ Existing blank and template journeys remain mandatory regression coverage.
 
 ### Production contract
 
-Production Compose validates that:
+Production Compose verifies:
 
 - app boots with `AI_DRAFT_PROVIDER=disabled` and no OpenAI key;
-- `/sop/ai-drafts/availability` reports disabled after authentication in application-level tests;
-- no production build requires a provider credential at image-build time;
-- existing migration/seed/persistence/backup/restore checks remain unchanged because Iteration 4 adds no database migration.
+- provider credentials are not build-time requirements;
+- existing migration/seed/persistence/readiness/PDF/backup/restore checks remain green;
+- Iteration 4 introduces no Prisma migration.
 
 ## 19. Acceptance Criteria
 
-Iteration 4 is complete when all are true:
+Iteration 4 is complete only when all are true:
 
 1. user can select `Dengan AI` from the existing workspace SOP creation surface;
 2. generation requires an owned workspace and performs zero application DB writes;
-3. provider output is strict structured data plus application domain validation;
-4. preview clearly shows actors, steps, routing, and lampiran before persistence;
-5. user supplies/edits `judul`, `nomorSop`, and `namaLembaga` before confirmation;
-6. confirmation revalidates the proposal and current workspace actor state;
-7. one transaction creates a normal editable `DRAFT` with no partial data on failure;
-8. generated draft enters the existing editor with no AI-specific editor mode;
-9. autosave, reload, Flowchart/BPMN, completion, version cloning, print/PDF remain compatible;
-10. blank and template creation still work when AI is disabled or fails;
-11. mandatory CI uses no live paid AI request;
-12. no new Prisma migration is introduced;
-13. no automatic regulation attachment or removed legacy domain is restored.
+3. OpenAI production calls are backend-only and use Responses API strict Structured Outputs;
+4. provider output also passes application domain validation;
+5. preview clearly shows actors, steps, routing, and lampiran before persistence;
+6. user supplies/edits `judul`, `nomorSop`, and `namaLembaga` before confirmation;
+7. confirmation revalidates proposal and current actor state;
+8. one transaction creates a normal editable `DRAFT` with no partial data on failure;
+9. generated draft enters the existing editor with no AI-specific editor mode;
+10. autosave, reload, Flowchart/BPMN, completion, version cloning, print/PDF remain compatible;
+11. blank and template creation still work when AI is disabled or fails;
+12. mandatory CI uses no live paid AI request;
+13. no new Prisma migration is introduced;
+14. no automatic regulation attachment or removed legacy domain is restored.
 
 ## 20. Implementation Boundary
 
-Implementation should be delivered on the same short-lived task branch/PR after this design spec is approved.
+After this design spec is approved, implementation continues on the same short-lived task branch/PR.
 
-The implementation plan must use TDD and should sequence work roughly as:
+The implementation plan must use TDD and sequence work as:
 
-1. provider/canonical schema RED-GREEN;
-2. generation service/API RED-GREEN;
-3. shared draft-instantiation extraction with regression coverage;
-4. confirmed AI create API RED-GREEN;
-5. client source/preview/create RED-GREEN;
-6. deterministic E2E acceptance;
-7. production configuration/contract;
-8. final review and mandatory CI.
+1. provider-output schema and validation RED/GREEN;
+2. provider abstraction, fake provider, OpenAI adapter, and configuration RED/GREEN;
+3. generation service/API RED/GREEN;
+4. shared draft-instantiation extraction with Iteration 3 regression coverage;
+5. confirmed AI create API RED/GREEN;
+6. client AI source/preview/create RED/GREEN;
+7. deterministic E2E acceptance;
+8. production contract/configuration;
+9. final review and mandatory CI.
 
 Do not begin a subsequent iteration from this document. Iteration transition remains explicit.
