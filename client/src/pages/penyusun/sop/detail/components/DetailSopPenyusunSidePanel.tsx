@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Activity, History, PenLine, Sparkles } from 'lucide-react'
 import {
   CollapsedStripButton,
@@ -39,7 +40,7 @@ export function DetailSOPPenyusunSidePanel({
   onBuatVersiBaru,
   isBuatVersiBaruPending = false,
 }: DetailSOPPenyusunSidePanelProps) {
-  const [collapsed, setCollapsed] = React.useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const visibleActiveTab = isReadOnly && activeTab === 'ai-review' ? 'edit' : activeTab
   const tabs = [
     { id: 'edit', label: isReadOnly ? 'Informasi' : 'Edit', icon: <PenLine className="h-3.5 w-3.5" /> },
