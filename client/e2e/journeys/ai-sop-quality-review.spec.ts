@@ -58,10 +58,11 @@ test('AI quality review uses saved draft state, stays advisory, clears after edi
 
   await expect(page.getByText('Cukup baik', { exact: true })).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText('Periksa kembali routing keputusan', { exact: true })).toBeVisible()
-  await expect(page.getByText('Langkah 2', { exact: true })).toBeVisible()
+  const findingButton = page.getByRole('button', { name: 'Buka Periksa kembali routing keputusan' })
+  await expect(findingButton).toContainText('Langkah 2')
   await expect(page.getByText(/bukan persetujuan/i)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Buka Periksa kembali routing keputusan' }).click()
+  await findingButton.click()
   await expect(page.locator('[data-sop-step-order="2"]:visible')).toBeVisible()
   await expect(visibleProcedureField(page, 'Kegiatan').nth(1)).toHaveValue(beforeReviewActivity)
 
