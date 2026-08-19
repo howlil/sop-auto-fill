@@ -1,10 +1,20 @@
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '../src/generated/prisma';
 
+type SeedTemplate = {
+  key: string;
+  steps: Array<{ kegiatan: string; keterangan?: string }>;
+};
+
 const { SYSTEM_TEMPLATES, seedSystemTemplates } = require('./system-template-seed.cjs') as {
-  SYSTEM_TEMPLATES: Array<{ key: string }>;
+  SYSTEM_TEMPLATES: SeedTemplate[];
   seedSystemTemplates: (prisma: PrismaClient) => Promise<void>;
 };
+const { normalizeSystemTemplateSteps } = require('./normalize-system-template-seed.cjs') as {
+  normalizeSystemTemplateSteps: (templates: SeedTemplate[]) => SeedTemplate[];
+};
+
+normalizeSystemTemplateSteps(SYSTEM_TEMPLATES);
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
