@@ -1,9 +1,9 @@
 # Current Iteration
 
 - **Iteration:** `5-ai-sop-quality-review`
-- **Status:** `IMPLEMENTATION_PLAN_READY`
+- **Status:** `REVIEW_READY`
 - **Working branch:** `feat/ai-sop-quality-review`
-- **Pull request:** `#7` (draft)
+- **Pull request:** `#7`
 - **Goal:** menambahkan AI-assisted quality review sebagai evaluasi transient terhadap snapshot SOP `DRAFT` yang sudah tersimpan, tanpa mutation otomatis dan tanpa persisted AI review history.
 - **Design spec:** `.agents/plans/2026-08-20-ai-sop-quality-review-design.md`
 - **Implementation plan:** `.agents/plans/2026-08-20-ai-sop-quality-review-implementation.md`
@@ -12,68 +12,84 @@
 
 Iteration 4 `ai-assisted-drafting` sudah squash-merged ke `master` melalui PR #6 sebagai `c662c2ca5cdb007f773ef9766e8bb65d3dc5f200`.
 
-## User-Approved Direction
+## Implemented Behavior
 
-Pada 2026-08-20 user menyetujui arah Iteration 5 `ai-sop-quality-review`, kemudian menyetujui written design spec dengan instruksi eksplisit untuk melanjutkan.
+Iteration 5 sudah diimplementasikan pada PR #7:
 
-Arah yang dikunci:
+- existing SOP editor memiliki tab `AI Review` hanya untuk SOP editable berstatus `DRAFT`;
+- browser hanya menargetkan `detailSopId`; backend memuat snapshot persisted authoritative dari database;
+- header dan prosedur autosave sekarang mengekspos `Promise<boolean>` agar review berhenti bila salah satu save gagal;
+- server memeriksa authentication, ownership, dan status `DRAFT` sebelum provider invocation;
+- repository review read-only dan tidak menggunakan create/update/delete atau transaction mutation;
+- provider input tidak memuat `detailSopId`, user/workspace ID, actor ID, internal step ID, audit log, token, atau SOP lain;
+- provider output diperlakukan sebagai `unknown`, divalidasi dan dicanonicalize terhadap snapshot yang sama;
+- findings hanya `ERROR | WARNING | SUGGESTION` dan status advisory hanya `PERLU_PERBAIKAN | CUKUP_BAIK | SIAP_DIREVIEW`;
+- invalid actor/step finding reference menghasilkan safe `422`;
+- hasil review transient, dibersihkan setelah edit, dan stale in-flight response dibuang bila SOP berubah selama request;
+- STEP finding membuka dan scroll ke row prosedur berdasarkan step order, tanpa membawa DB ID ke provider/UI contract;
+- non-STEP finding kembali ke existing Edit tab;
+- completed SOP tetap immutable dan tidak menampilkan AI Review; versi baru kembali menjadi DRAFT dan dapat direview;
+- tidak ada auto-fix/write-back, compliance certification, regulation lookup/RAG/web/file search, persisted review/history/job, background queue, generic chat, collaboration, atau Prisma migration.
 
-- quality review berada di existing SOP editor, bukan page/editor baru;
-- target review adalah ordinary editable SOP `DRAFT`;
-- review memakai server-authoritative persisted snapshot, bukan arbitrary SOP JSON dari browser;
-- client memastikan autosave header dan prosedur benar-benar berhasil sebelum memulai review;
-- AI menghasilkan findings transient `ERROR | WARNING | SUGGESTION` yang menunjuk lokasi spesifik pada SOP;
-- findings berfokus pada process structure, actor responsibility, input/output continuity, decision routing, clarity, supporting fields, time plausibility, dan completeness signals;
-- AI review bersifat advisory dan bukan approval, completion gate, legal compliance score, atau regulatory certification;
-- user memperbaiki SOP secara manual melalui editor existing dan autosave existing;
-- post-review edit membersihkan hasil review lama agar finding stale tidak dianggap masih berlaku;
-- tidak ada automatic fix/write-back pada Iteration 5;
-- tidak ada regulation lookup, web/file search, RAG, approval/evaluation/TTE/public archive, collaboration, model settings UI, atau generic chat;
-- tidak ada Prisma migration, persisted AI review/history/job, atau background queue;
-- mandatory CI memakai deterministic fake provider dan tidak memanggil provider live/berbayar.
+## Runtime and Provider Boundary
 
-## Design Invariants
+- `AI_REVIEW_PROVIDER=disabled|openai|fake`, default `disabled`;
+- `AI_REVIEW_TIMEOUT_MS=5000..60000`, default `30000`;
+- `fake` hanya untuk test/development dan ditolak pada production;
+- production OpenAI adapter menggunakan backend-only Node 22 `fetch` ke Responses API;
+- runtime credential tetap `OPENAI_API_KEY` dan `OPENAI_MODEL` server-side;
+- request memakai `store: false`, strict JSON Schema Structured Outputs, dan tidak mengirim `tools`/retrieval;
+- upstream rate-limit/network/refusal/invalid output dipetakan ke error aplikasi yang sanitized;
+- production Compose dan production contract memaksa AI review default `disabled` dan melarang fake provider.
 
-1. Browser hanya mengirim target `detailSopId`; backend memuat review snapshot dari database.
-2. Ownership dan status `DRAFT` diverifikasi server-side sebelum provider invocation.
-3. Review path tidak membuat, mengubah, atau menghapus application rows.
-4. Provider input tidak mengandung application DB IDs, termasuk `detailSopId`, actor IDs, internal step IDs, workspace ID, atau user ID; provider menerima human-readable content dan step order references.
-5. Provider output diperlakukan sebagai untrusted input dan divalidasi terhadap snapshot yang sama.
-6. Invalid actor/step references pada finding menolak provider output, bukan diteruskan sebagai dangling UI state.
-7. Review result transient dan tidak menjadi completion prerequisite.
-8. Existing editor, autosave, Flowchart/BPMN, PDF, completion, dan versioning tetap berfungsi ketika AI review disabled/gagal.
-9. Draft-generation provider contract Iteration 4 tidak di-overload; quality review memakai provider interface terpisah.
-10. OpenAI production adapter tetap backend-only, `store: false`, strict structured output, no tools/retrieval, bounded timeout `AI_REVIEW_TIMEOUT_MS`, dan sanitized errors.
+## TDD and Regression Evidence
 
-## Planning Review
+RED/GREEN yang benar-benar dijalankan mencakup:
 
-Implementation plan sudah ditulis dengan delapan task TDD: domain/schema, read-only snapshot repository, service/auth boundary, production provider/runtime, autosave/client hook, editor UI, genuine RED/GREEN E2E, dan final security/CI gate.
+1. review schema/types: RED karena module belum ada, kemudian GREEN setelah canonical validation;
+2. authoritative repository: RED karena repository belum ada, kemudian GREEN setelah read-only snapshot query;
+3. service trust boundary: RED karena service belum ada, kemudian GREEN setelah ownership/DRAFT/ID-stripping/provider validation;
+4. runtime/OpenAI provider: RED untuk env review dan adapter transport, kemudian GREEN dengan config terpisah dan sanitized Responses API adapter;
+5. autosave gate: RED karena existing `flush()` masih `Promise<void>`, kemudian GREEN dengan backward-compatible boolean outcome;
+6. client review hook/UI: RED karena API/hook/panel belum ada, kemudian GREEN setelah transient autosave-gated review flow;
+7. acceptance RED: AI review provider sengaja disabled sehingga journey baru gagal pada CTA disabled, sementara tiga existing journeys tetap pass; setelah fake provider diaktifkan hanya pada E2E, acceptance bergerak ke GREEN;
+8. concurrency regression: RED membuktikan stale in-flight response sempat dapat muncul setelah edit; GREEN setelah request fingerprint/detail guard membuang response stale;
+9. E2E infrastructure regression diperbaiki dengan hosted Chrome + Playwright ffmpeg helper tanpa mengubah product behavior.
 
-Self-review implementation plan menemukan dan memperbaiki asumsi autosave yang tidak akurat. Existing header dan prosedur `flush()` menyimpan error ke state dan resolve; implementation plan sekarang mengubah resolved value secara backward-compatible menjadi `Promise<boolean>`. AI review hanya boleh memanggil backend ketika kedua flush menghasilkan `true`. Caller existing yang tidak membutuhkan result dapat tetap mengabaikan boolean.
+## Final Verification
 
-Implementation plan juga mengunci:
+Code-bearing head sebelum state-doc commit:
 
-- mapping repository konkret dari internal target IDs ke step order;
-- provider-safe mapper tanpa spread object yang dapat membawa DB IDs;
-- side-panel `AI Review` sebagai tab existing, bukan editor/panel kedua;
-- STEP finding membuka/scroll ke row prosedur melalui `data-sop-step-order`;
-- non-STEP finding kembali ke tab Edit tanpa membuat selector field palsu;
-- genuine RED E2E harus dijalankan sebelum `AI_REVIEW_PROVIDER=fake` diaktifkan pada CI;
-- production tetap default `AI_REVIEW_PROVIDER=disabled`.
+`3655c892c1c97b425dade448d81954718553be1c`
 
-## Execution State
+Mandatory CI #296 / run `32305681398` pada head tersebut:
 
-Written design spec sudah approved. Implementation plan sudah ditulis dan self-reviewed. Belum ada production code, test implementation, migration, atau UI behavior Iteration 5 yang ditambahkan.
+- `server`: success;
+- `client`: success;
+- `e2e`: success;
+- `production-compose`: success.
 
-Selama status `IMPLEMENTATION_PLAN_READY`:
+E2E menjalankan 4 journey menggunakan 1 worker dan semuanya pass:
 
-- implementation harus mengikuti plan pada branch dan PR #7 yang sama;
-- gunakan TDD RED/GREEN per task;
-- jangan membuat branch atau PR baru untuk Iteration 5;
-- jangan memperluas scope menjadi auto-fix, compliance retrieval, collaboration, atau subsystem lain;
-- final state harus melewati full server/client/E2E/production-compose CI dan focused trust-boundary review;
-- karena Iteration 5 memperluas external AI provider/credential boundary, final squash merge tetap memerlukan approval user eksplisit setelah `REVIEW_READY`.
+- AI-assisted drafting lifecycle: pass (22.1s);
+- AI SOP quality review lifecycle: pass (8.6s);
+- blank SOP lifecycle: pass (16.2s);
+- system template lifecycle: pass (11.1s);
+- total: `4 passed (1.3m)`.
 
-## Transition Rule
+Focused final audit:
 
-Jangan memulai Iteration 6 atau task produk di luar Iteration 5 hanya dari file ini. Transition berikutnya tetap membutuhkan instruksi atau approval user eksplisit.
+- branch `behind_by: 0` terhadap `master`;
+- tidak ada Prisma schema/migration baru;
+- tidak ada unresolved PR review thread;
+- tidak ada submitted review blocker;
+- tidak ada prompt/API-key/full-provider-response logging pada AI review path;
+- tidak ada application DB ID pada provider-safe input;
+- tidak ada persistence mutation pada review path;
+- tidak ada automatic completion/approval/compliance gate yang ditambahkan.
+
+## Merge Gate
+
+Implementation Iteration 5 selesai dan siap direview. Karena iteration ini memperluas external AI provider dan server-side credential boundary, squash merge PR #7 ke `master` tetap memerlukan approval user eksplisit setelah final documentation-head CI juga hijau.
+
+Jangan memulai Iteration 6 atau task produk lain otomatis setelah merge. Transition berikutnya tetap membutuhkan instruksi user eksplisit.
