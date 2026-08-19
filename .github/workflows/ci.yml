@@ -109,6 +109,10 @@ jobs:
         run: pnpm --dir server exec prisma migrate deploy
       - name: Verify migration deployment is idempotent
         run: pnpm --dir server exec prisma migrate deploy
+      - name: Seed system templates twice
+        run: |
+          pnpm --dir server exec ts-node --transpile-only prisma/seed.ts
+          pnpm --dir server exec ts-node --transpile-only prisma/seed.ts
       - name: Build server
         run: pnpm --dir server build
       - name: Start server
@@ -177,6 +181,17 @@ jobs:
         run: |
           docker compose --env-file .env.production.ci run --rm backend pnpm prisma migrate deploy
           docker compose --env-file .env.production.ci run --rm backend pnpm prisma migrate deploy
+
+      - name: Seed system templates twice and verify exact state
+        run: |
+          docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
+          docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -N -usop -psop-ci-password sop_prod_ci \
+            -e "SELECT COUNT(*) FROM SopTemplate" | grep -qx '3'
+          docker compose --env-file .env.production.ci exec -T mysql \
+            mysql -N -usop -psop-ci-password sop_prod_ci \
+            -e "SELECT COUNT(*) FROM SopTemplateStep" | grep -qx '15'
 
       - name: Prove MySQL volume persistence
         run: |
