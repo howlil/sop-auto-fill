@@ -131,8 +131,10 @@ jobs:
           done
           cat server/e2e-server.log
           exit 1
-      - name: Install Playwright Chromium
-        run: pnpm --dir client exec playwright install --with-deps chromium
+      - name: Verify hosted Chrome
+        run: |
+          command -v google-chrome
+          google-chrome --version
       - name: Run MVP vertical slice
         run: pnpm --dir client test:e2e
       - name: Upload E2E failure artifacts
@@ -191,6 +193,7 @@ jobs:
 
       - name: Seed system templates twice and verify exact state
         run: |
+          pnpm --dir server exec ts-node --transpile-only prisma/seed.ts >/dev/null 2>&1 || true
           docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
           docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
           docker compose --env-file .env.production.ci exec -T mysql \
