@@ -12,6 +12,7 @@ export default defineConfig({
   testMatch: [
     'journeys/mvp-vertical-slice.spec.ts',
     'journeys/ai-assisted-draft.spec.ts',
+    'journeys/ai-sop-quality-review.spec.ts',
   ],
   globalSetup: fileURLToPath(new URL('./e2e/global-setup.ts', import.meta.url)),
   timeout: 60_000,
