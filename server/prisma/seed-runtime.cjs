@@ -6,6 +6,11 @@ const {
   SYSTEM_TEMPLATES,
   seedSystemTemplates,
 } = require('./system-template-seed.cjs');
+const {
+  normalizeSystemTemplateSteps,
+} = require('./normalize-system-template-seed.cjs');
+
+normalizeSystemTemplateSteps(SYSTEM_TEMPLATES);
 
 function required(name) {
   const value = process.env[name]?.trim();
