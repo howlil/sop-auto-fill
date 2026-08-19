@@ -73,7 +73,7 @@ describe('CreateAiDraftDto', () => {
     expect(dto.judul).toBe('SOP Pelayanan');
     expect(dto.nomorSop).toBe('SOP/AI/001');
     expect(dto.namaLembaga).toBe('Unit Pelayanan');
-    expect(dto.proposal).toBe(proposal);
+    expect(dto.proposal).toStrictEqual(proposal);
     await expect(validate(dto)).resolves.toHaveLength(0);
   });
 
