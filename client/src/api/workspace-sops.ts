@@ -173,6 +173,5 @@ export const workspaceSopApi = {
   reviewAiSop: (detailSopId: string) =>
     apiClient.post<ApiSuccessResponse<SopQualityReviewResponse>>(
       `/sop/${encodeURIComponent(detailSopId)}/ai-review`,
-      {},
     ),
 };
