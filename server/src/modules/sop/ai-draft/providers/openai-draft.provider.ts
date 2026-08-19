@@ -157,7 +157,13 @@ export class OpenAiDraftProvider implements AiDraftProvider {
         if (item.type !== 'message') continue;
         for (const content of item.content ?? []) {
           if (content.type === 'refusal') throw regenerateError();
-          if (content.type !== 'output_text' || typeof content.text !== 'string') continue;
+          if (
+            content.type !== 'output_text' ||
+            !('text' in content) ||
+            typeof content.text !== 'string'
+          ) {
+            continue;
+          }
           try {
             return JSON.parse(content.text) as AiDraftProviderOutput;
           } catch {
