@@ -156,9 +156,9 @@ test('system template creates a normal draft and preserves the existing lifecycl
 
   await expect(page.getByText('Dokumen SOP', { exact: true })).toBeVisible()
   await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(title)
-  await expect(
-    page.getByDisplayValue('Jangan memproses permohonan yang persyaratannya belum lengkap.'),
-  ).toBeVisible()
+  await expect(page.getByPlaceholder('Peringatan 1')).toHaveValue(
+    'Jangan memproses permohonan yang persyaratannya belum lengkap.',
+  )
   await expect(page.getByText(reusedActor, { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'Langkah' }).click()
