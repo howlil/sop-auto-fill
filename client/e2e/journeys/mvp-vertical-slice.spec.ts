@@ -143,9 +143,11 @@ test('system template creates a normal draft and preserves the existing lifecycl
   await expect(templateSelect.getByRole('option', { name: 'Pelayanan' })).toHaveCount(1)
   await templateSelect.selectOption({ label: 'Pelayanan' })
 
-  await expect(page.getByText('Aktor dipakai ulang', { exact: true })).toBeVisible()
-  await expect(page.getByText('Pelaksana Layanan', { exact: true })).toBeVisible()
-  await expect(page.getByText('Penanggung Jawab Layanan', { exact: true })).toBeVisible()
+  const reusedActorsPreview = page.getByText('Aktor dipakai ulang', { exact: true }).locator('..')
+  const newActorsPreview = page.getByText('Aktor baru', { exact: true }).locator('..')
+  await expect(reusedActorsPreview).toContainText(reusedActor)
+  await expect(newActorsPreview).toContainText('Pelaksana Layanan')
+  await expect(newActorsPreview).toContainText('Penanggung Jawab Layanan')
   await expect(page.getByText('5 langkah', { exact: true })).toBeVisible()
 
   await page.getByPlaceholder('Judul SOP').fill(title)
