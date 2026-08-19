@@ -6,9 +6,14 @@ import { workspaceApi } from "@/api/workspaces";
 import { workspaceSopApi } from "@/api/workspace-sops";
 import { queryClient } from "@/config/query-client";
 
+type CreateSource = "blank" | "template";
+
 export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
+  const [createSource, setCreateSource] = useState<CreateSource>("blank");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [judul, setJudul] = useState("");
   const [nomorSop, setNomorSop] = useState("");
+  const [namaLembaga, setNamaLembaga] = useState("");
   const [namaPelaksana, setNamaPelaksana] = useState("");
 
   const workspace = useQuery({
@@ -23,6 +28,16 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
     queryKey: ["workspace-pelaksana", workspaceId],
     queryFn: () => pelaksanaApi.list(workspaceId),
   });
+  const templates = useQuery({
+    queryKey: ["sop-templates"],
+    queryFn: () => workspaceSopApi.listTemplates(),
+    enabled: createSource === "template",
+  });
+  const templatePreview = useQuery({
+    queryKey: ["sop-template-preview", selectedTemplateId, workspaceId],
+    queryFn: () => workspaceSopApi.previewTemplate(selectedTemplateId, workspaceId),
+    enabled: createSource === "template" && selectedTemplateId.length > 0,
+  });
 
   const createPelaksana = useMutation({
     mutationFn: () => pelaksanaApi.create(workspaceId, namaPelaksana.trim()),
@@ -33,11 +48,30 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   });
 
   const createSop = useMutation({
-    mutationFn: () => workspaceSopApi.create({ workspaceId, judul: judul.trim(), nomorSop: nomorSop.trim() }),
+    mutationFn: async () => {
+      if (createSource === "template") {
+        if (!selectedTemplateId) throw new Error("Template SOP belum dipilih");
+        return workspaceSopApi.createFromTemplate(selectedTemplateId, {
+          workspaceId,
+          judul: judul.trim(),
+          nomorSop: nomorSop.trim(),
+          namaLembaga: namaLembaga.trim(),
+        });
+      }
+      return workspaceSopApi.create({
+        workspaceId,
+        judul: judul.trim(),
+        nomorSop: nomorSop.trim(),
+      });
+    },
     onSuccess: async (response) => {
       setJudul("");
       setNomorSop("");
-      await queryClient.invalidateQueries({ queryKey: ["workspace-sops", workspaceId] });
+      setNamaLembaga("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspace-sops", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspace-pelaksana", workspaceId] }),
+      ]);
       const detailId = response.data.detailSopId;
       if (detailId) window.location.assign(`/workspaces/${workspaceId}/sops/${detailId}`);
     },
@@ -52,11 +86,32 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!judul.trim() || !nomorSop.trim()) return;
+    if (
+      createSource === "template" &&
+      (!selectedTemplateId || !namaLembaga.trim() || !templatePreview.isSuccess)
+    ) {
+      return;
+    }
     void createSop.mutateAsync();
+  };
+
+  const switchCreateSource = (source: CreateSource) => {
+    setCreateSource(source);
+    if (source === "blank") {
+      setSelectedTemplateId("");
+      setNamaLembaga("");
+    }
   };
 
   const items = sops.data?.data ?? [];
   const pelaksanaItems = pelaksana.data?.data ?? [];
+  const templateItems = templates.data?.data ?? [];
+  const preview = templatePreview.data?.data;
+  const canCreate =
+    judul.trim().length > 0 &&
+    nomorSop.trim().length > 0 &&
+    (createSource === "blank" ||
+      (selectedTemplateId.length > 0 && namaLembaga.trim().length > 0 && templatePreview.isSuccess));
 
   return (
     <main className="min-h-screen bg-surface-subtle">
@@ -117,29 +172,131 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
           </div>
         </section>
 
-        <form onSubmit={onSubmit} className="mb-8 grid gap-3 rounded-xl border border-border bg-background p-5 md:grid-cols-[1fr_220px_auto]">
-          <input
-            value={judul}
-            onChange={(event) => setJudul(event.target.value)}
-            placeholder="Judul SOP"
-            maxLength={500}
-            className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            value={nomorSop}
-            onChange={(event) => setNomorSop(event.target.value)}
-            placeholder="Nomor SOP"
-            maxLength={255}
-            className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={createSop.isPending || !judul.trim() || !nomorSop.trim()}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" /> Buat SOP
-          </button>
-        </form>
+        <section className="mb-8 rounded-xl border border-border bg-background p-5" aria-labelledby="create-sop-title">
+          <div className="mb-4">
+            <h2 id="create-sop-title" className="font-semibold text-foreground">Buat SOP</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Mulai dari dokumen kosong atau gunakan template sistem sebagai titik awal.</p>
+          </div>
+
+          <div className="mb-5 inline-flex rounded-lg border border-border bg-surface-subtle p-1" role="group" aria-label="Sumber pembuatan SOP">
+            <button
+              type="button"
+              aria-pressed={createSource === "blank"}
+              onClick={() => switchCreateSource("blank")}
+              className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "blank" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              SOP Kosong
+            </button>
+            <button
+              type="button"
+              aria-pressed={createSource === "template"}
+              onClick={() => switchCreateSource("template")}
+              className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "template" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              Dari Template
+            </button>
+          </div>
+
+          {createSource === "template" ? (
+            <div className="mb-5 space-y-4">
+              <label className="block text-sm font-medium text-foreground">
+                Template sistem
+                <select
+                  value={selectedTemplateId}
+                  onChange={(event) => setSelectedTemplateId(event.target.value)}
+                  disabled={templates.isLoading || templates.isError}
+                  className="mt-2 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Pilih template</option>
+                  {templateItems.map((template) => (
+                    <option key={template.templateId} value={template.templateId}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {templates.isLoading ? <p className="text-sm text-muted-foreground">Memuat template...</p> : null}
+              {templates.isError ? <p className="text-sm text-destructive">Gagal memuat template SOP.</p> : null}
+              {selectedTemplateId && templatePreview.isLoading ? (
+                <p className="text-sm text-muted-foreground">Menyiapkan preview template...</p>
+              ) : null}
+              {templatePreview.isError ? (
+                <p className="text-sm text-destructive">Gagal menyiapkan preview template.</p>
+              ) : null}
+
+              {preview ? (
+                <div className="rounded-lg border border-border bg-surface-subtle p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-foreground">{preview.template.name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{preview.template.description}</p>
+                    </div>
+                    <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                      {preview.stepCount} langkah
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor dipakai ulang</p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {preview.actorsToReuse.length > 0
+                          ? preview.actorsToReuse.map((actor) => actor.name).join(", ")
+                          : "Tidak ada"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor baru</p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {preview.actorsToCreate.length > 0 ? preview.actorsToCreate.join(", ") : "Tidak ada"}
+                      </p>
+                    </div>
+                  </div>
+                  {Object.keys(preview.lampiranDefaults).length > 0 ? (
+                    <p className="mt-4 text-xs text-muted-foreground">Template juga mengisi lampiran awal yang masih dapat diedit di editor.</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
+            <input
+              value={judul}
+              onChange={(event) => setJudul(event.target.value)}
+              placeholder="Judul SOP"
+              maxLength={500}
+              className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              value={nomorSop}
+              onChange={(event) => setNomorSop(event.target.value)}
+              placeholder="Nomor SOP"
+              maxLength={255}
+              className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {createSource === "template" ? (
+              <input
+                value={namaLembaga}
+                onChange={(event) => setNamaLembaga(event.target.value)}
+                placeholder="Nama lembaga"
+                maxLength={500}
+                className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500 md:col-span-2"
+              />
+            ) : null}
+            <div className="flex items-center gap-3 md:col-span-2">
+              <button
+                type="submit"
+                disabled={createSop.isPending || !canCreate}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                {createSource === "template" ? "Buat dari Template" : "Buat SOP"}
+              </button>
+              {createSop.isError ? <p className="text-sm text-destructive">Gagal membuat SOP.</p> : null}
+            </div>
+          </form>
+        </section>
 
         {sops.isLoading ? (
           <p className="text-sm text-muted-foreground">Memuat SOP...</p>
