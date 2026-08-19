@@ -12,13 +12,13 @@
 
 Iteration 3 added deterministic system templates as a safe starting point for SOP authoring. Iteration 4 added AI-assisted drafting as a transient generate-preview-confirm flow that creates an ordinary editable SOP `DRAFT` only after explicit user confirmation. The existing editor remains the single editing surface for blank, template, and AI-created SOPs.
 
-The next product gap is not another creation source. Users can already start a draft in three ways, but the application does not yet help them inspect the quality and internal consistency of a draft before they complete it. Manual review is possible, but users must notice ambiguous steps, inconsistent actor responsibilities, weak input/output continuity, questionable decision routing, or incomplete supporting fields themselves.
+The next product gap is quality inspection before a draft is completed. Users can already start a draft in three ways, but the application does not yet help them detect ambiguous activities, weak responsibility boundaries, inconsistent input/output continuity, questionable decision routing, incomplete supporting fields, or suspicious time entries.
 
-Iteration 5 therefore adds an AI-assisted **quality review** capability inside the existing SOP editor. The AI acts as a transient reviewer. It does not edit the SOP, approve it, certify compliance, or persist an AI review record.
+Iteration 5 therefore adds AI-assisted **quality review** inside the existing SOP editor. The AI acts as a transient reviewer. It does not edit the SOP, approve it, certify compliance, or persist a review record.
 
 ## 2. Product Goal
 
-Allow the owner of an editable SOP `DRAFT` to request a structured AI quality review of the latest persisted SOP snapshot, receive actionable findings tied to specific parts of the SOP, manually correct the draft in the existing editor, and run the review again.
+Allow the owner of an editable SOP `DRAFT` to request a structured AI review of the latest persisted SOP snapshot, receive actionable findings tied to specific locations, manually correct the draft through the existing editor, and run the review again.
 
 Primary flow:
 
@@ -27,28 +27,29 @@ Open editable SOP DRAFT
   -> wait until autosave is settled
   -> Periksa dengan AI
   -> server loads authoritative persisted SOP snapshot
-  -> AI provider reviews structured snapshot
-  -> application validates/canonicalizes review output
+  -> server maps snapshot to provider-safe context
+  -> AI provider reviews structured context
+  -> application validates/canonicalizes output
   -> transient review panel appears
   -> user manually edits existing SOP editor
   -> autosave
   -> optional review again
 ```
 
-The review capability must work regardless of whether the SOP originated from `SOP Kosong`, `Dari Template`, or `Dengan AI`.
+The capability must work for SOPs originating from `SOP Kosong`, `Dari Template`, or `Dengan AI`.
 
 ## 3. Design Principles
 
-1. **Review, not mutation.** AI output never writes SOP data in Iteration 5.
-2. **Server-authoritative input.** Browser sends an identifier, not an arbitrary SOP object for the model to trust.
-3. **Persisted snapshot only.** Review operates on the latest successfully autosaved database state.
-4. **Existing editor stays authoritative.** Corrections are made manually through the existing editor and existing autosave path.
-5. **Structured output is untrusted.** Provider output must pass strict application-domain validation before reaching the client.
-6. **No compliance certification.** Findings discuss structural and writing quality, not authoritative legal/regulatory compliance.
-7. **Provider-neutral orchestration.** Review logic depends on a dedicated review-provider interface, not directly on OpenAI transport.
-8. **No new persistence.** No AI review table, prompt history, token ledger, background job, or Prisma migration in this iteration.
-9. **AI remains optional.** When AI is disabled or unavailable, existing editor, autosave, diagrams, PDF, completion, and versioning continue to work.
-10. **Mandatory CI never calls a paid/live provider.** Test and E2E use deterministic fake review output.
+1. **Review, not mutation.** AI review never writes SOP data.
+2. **Server-authoritative source.** Browser sends only the target identifier; backend loads the SOP from the database.
+3. **Persisted snapshot only.** Review operates on the latest successfully autosaved state.
+4. **Existing editor remains authoritative.** Corrections use existing controls and autosave.
+5. **Provider output is untrusted.** Structured output is validated by application rules before reaching the UI.
+6. **No compliance certification.** Findings concern internal quality and clarity, not authoritative legal/regulatory compliance.
+7. **Dedicated provider contract.** Quality review does not overload `AiDraftProvider.generate()`.
+8. **No new persistence.** No AI review table, prompt history, token ledger, background job, or migration.
+9. **AI remains optional.** Disabled/unavailable AI cannot break normal authoring or lifecycle features.
+10. **Mandatory CI never calls a live/paid provider.** Tests use deterministic fake review output.
 
 ## 4. Non-Goals
 
@@ -59,9 +60,8 @@ Iteration 5 does **not** add:
 - approval, evaluation, TTE, public archive, OPD roles, or workflow restoration;
 - workspace collaboration, invitations, multi-owner access, or new authorization roles;
 - persisted AI review/history/chat/job state;
-- automatic completion of an SOP based on review score;
-- model selection in the browser;
-- user-editable system prompts;
+- automatic completion based on AI findings;
+- browser model selection or user-editable system prompts;
 - background/queued review jobs;
 - review of arbitrary client-provided SOP JSON;
 - review of `COMPLETED` or `ARCHIVED` SOPs as an editing workflow;
@@ -69,53 +69,55 @@ Iteration 5 does **not** add:
 
 ## 5. Approaches Considered
 
-### Approach A — Client sends the whole editor state to AI review endpoint
+### Approach A — Client sends editor state
 
-The client would serialize its current editor state and send that object to the backend for review.
+The browser serializes the current editor and sends it to the review endpoint.
 
-**Advantages:** simple UI-to-provider plumbing and potentially includes unsaved state.
+**Advantage:** can include unsaved state.
 
-**Rejected because:** it makes browser state an authoritative review source, complicates ownership/trust boundaries, duplicates editor-domain serialization, and can review a state that has never passed normal autosave validation.
+**Rejected:** browser state becomes authoritative, review can bypass normal persistence validation, and editor-domain serialization is duplicated.
 
-### Approach B — Server loads the SOP snapshot and returns transient structured findings
+### Approach B — Server loads the persisted SOP snapshot
 
-The client sends only the target `detailSopId`. The server validates ownership/editability, loads the persisted SOP snapshot from the database, constructs a bounded review context, calls a provider through a dedicated interface, validates the response, and returns transient findings.
+The client sends only `detailSopId`. Server validates ownership/editability, loads persisted data, maps it to a provider-safe context, invokes a provider, validates the result, and returns transient findings.
 
-**Selected.** This preserves the trust model established in Iteration 4 and ensures review input is the same normalized data the product already persists.
+**Selected.** This preserves the trust boundary established in Iteration 4 and keeps review aligned with actual stored product state.
 
-### Approach C — Persist AI review runs and findings
+### Approach C — Persist review runs and findings
 
-Each review would create a database record containing status, findings, model metadata, and timestamps.
+Each review becomes a database entity with history and model metadata.
 
-**Rejected for Iteration 5.** Persistence introduces schema migration, retention/privacy questions, stale-finding lifecycle, history UX, and additional product semantics that are not required to prove the value of AI quality review.
+**Rejected for Iteration 5.** It adds migration, retention/privacy questions, stale-history semantics, and UX that are unnecessary to prove the review capability.
 
 ## 6. Eligibility and Autosave Boundary
 
 ### 6.1 Eligible SOP
 
-AI quality review is available only for an authenticated owner viewing an ordinary editable SOP whose current status is `DRAFT`.
+Review is available only to the authenticated owner of an ordinary editable SOP with current status `DRAFT`.
 
-The backend must re-check ownership and status. The client must not be trusted to determine eligibility by itself.
+Backend re-checks ownership and status. Client eligibility is only presentation logic and is never authoritative.
 
-If the SOP is completed or archived, the endpoint rejects the review request using a user-safe application error. The immutable completed/version lifecycle remains unchanged.
+Completed or archived SOPs are rejected using the existing state-conflict convention. Existing immutable completion/version behavior is unchanged.
 
 ### 6.2 Latest persisted snapshot
 
-The backend always reads the SOP from the database. It does not accept the SOP body from the browser.
+Backend always reads from the database and never accepts the SOP document body from the browser.
 
-To prevent the user from reviewing stale data while an autosave is still in flight, the client review action must integrate with the existing autosave state:
+To avoid knowingly reviewing stale data:
 
-- if autosave is pending/in flight, the review button is disabled or waits for the active save to settle;
-- after successful save confirmation, the client calls the review endpoint;
-- if the latest autosave failed, review must not silently run against older data; the user is told to resolve/save the draft first.
+- while autosave is pending/in flight, review is disabled or waits for that save to settle;
+- review begins only after successful save confirmation;
+- if the latest save is known to have failed, review does not run and the user is told to resolve/save the draft first.
 
-The implementation plan must inspect the current autosave hooks and choose the smallest compatible mechanism. It must not introduce a second persistence path solely for AI review.
+Implementation must integrate with the existing autosave state. It must not add a second save path solely for AI review.
 
-## 7. Review Snapshot
+If current autosave architecture cannot expose a safe settled-save boundary without major restructuring, implementation stops and the design is revisited.
 
-The server repository/service constructs a bounded `SopQualityReviewSnapshot` from current persisted data.
+## 7. Application Snapshot and Provider-Safe Context
 
-Conceptual shape:
+### 7.1 Internal application snapshot
+
+Server constructs a bounded internal `SopQualityReviewSnapshot` from persisted data:
 
 ```ts
 interface SopQualityReviewSnapshot {
@@ -129,10 +131,12 @@ interface SopQualityReviewSnapshot {
   peralatanPerlengkapan: string[];
   pencatatanPendataan: string[];
   actors: Array<{
+    pelaksanaId: string;
     name: string;
     order: number;
   }>;
   steps: Array<{
+    langkahSopId: string;
     urutan: number;
     kegiatan: string;
     jenis: 'AWAL_AKHIR' | 'KEGIATAN' | 'KEPUTUSAN';
@@ -148,46 +152,53 @@ interface SopQualityReviewSnapshot {
 }
 ```
 
-Database IDs other than the minimum target identifier required by application routing must not be sent to the AI provider. In particular, actor IDs and internal step IDs are mapped to human-readable names and step order references before provider invocation.
+Internal IDs may exist in this application snapshot because they are useful for ownership/loading/mapping, but they are not provider input.
 
-The snapshot must be bounded by the existing domain constraints. Iteration 5 does not invent a second SOP schema.
+### 7.2 Provider-safe context
+
+Before invocation, service maps the snapshot into `SopQualityReviewProviderInput` containing only human-readable SOP content and order references.
+
+Provider input contains **no application database IDs**, including:
+
+- no `detailSopId`;
+- no `pelaksanaId`;
+- no internal step IDs;
+- no user/workspace IDs.
+
+Actors are represented by names and ordering. Decision targets are represented by step order numbers.
+
+The provider-safe context must remain bounded by existing SOP domain constraints; Iteration 5 does not invent a second editable SOP model.
 
 ## 8. Quality Dimensions
 
-The AI review is intentionally scoped to internal quality and clarity. The system prompt and output contract cover these dimensions:
+Review covers only internal quality and clarity:
 
-1. **Process structure** — whether the sequence is understandable and operationally coherent.
-2. **Actor responsibility** — whether each step has a clear, plausible responsible actor and responsibility shifts are understandable.
-3. **Input/output continuity** — whether a step's required input and produced output are internally coherent with surrounding steps.
-4. **Decision routing** — whether decision wording and yes/no routing appear understandable and non-contradictory from the supplied structure.
-5. **Instruction clarity** — ambiguity, overly broad wording, unclear verbs, or activities that are difficult to execute consistently.
-6. **Supporting fields** — obvious gaps or weak content in warning, qualification, equipment/supplies, or recordkeeping sections.
-7. **Time plausibility** — clearly suspicious/inconsistent time entries relative to the described activity, without presenting the model's estimate as authoritative fact.
-8. **Completeness signals** — missing context that a human reviewer should verify before completing the SOP.
+1. **Process structure** — understandable and operationally coherent sequence.
+2. **Actor responsibility** — clear responsible actor and understandable responsibility shifts.
+3. **Input/output continuity** — coherent required input and produced output between surrounding activities.
+4. **Decision routing** — understandable decision wording and non-contradictory yes/no routing from supplied structure.
+5. **Instruction clarity** — ambiguous, overly broad, or difficult-to-execute wording.
+6. **Supporting fields** — obvious gaps/weaknesses in warning, qualification, equipment/supplies, or recordkeeping.
+7. **Time plausibility** — suspicious/inconsistent time entries, without presenting model estimates as authoritative facts.
+8. **Completeness signals** — missing context a human reviewer should verify before completion.
 
-The AI must not claim that a draft is legally compliant, officially approved, or compliant with a named regulation unless authoritative retrieval is implemented in a future iteration.
+The model must not state that a draft is legally compliant, officially approved, or compliant with a named regulation.
 
 ## 9. Review Result Contract
 
 ### 9.1 Severity
 
-Each finding has exactly one severity:
-
 ```ts
 type SopQualityFindingSeverity = 'ERROR' | 'WARNING' | 'SUGGESTION';
 ```
 
-Meaning:
-
-- `ERROR`: a strong internal structural/consistency problem in the supplied SOP that should be checked before completion.
+- `ERROR`: strong internal structural/consistency issue that should be checked before completion.
 - `WARNING`: ambiguous, weak, or suspicious content requiring human review.
 - `SUGGESTION`: optional improvement for clarity or maintainability.
 
-`ERROR` is **not** an application validation error and does not automatically block completion in Iteration 5. Existing completion rules remain authoritative.
+`ERROR` is advisory AI output, not an application validation error and not an automatic completion blocker.
 
 ### 9.2 Location
-
-A finding targets one reviewable location:
 
 ```ts
 type SopQualityFindingLocation =
@@ -200,7 +211,7 @@ type SopQualityFindingLocation =
   | { kind: 'STEP'; stepOrder: number };
 ```
 
-The application validates that referenced `stepOrder` exists in the reviewed snapshot and that `actorName`, when present, maps to a normalized actor in the snapshot. Invalid references reject the provider output rather than exposing dangling findings to the UI.
+Application validates that `stepOrder` exists in the reviewed snapshot and that `actorName` resolves to a normalized actor in that snapshot. Invalid references reject provider output instead of producing dangling UI findings.
 
 ### 9.3 Finding
 
@@ -229,12 +240,10 @@ Limits:
 - `title`: 3–160 trimmed characters;
 - `explanation`: 10–1000 trimmed characters;
 - `recommendation`: 3–1000 trimmed characters;
-- duplicate findings with the same normalized severity/category/location/title are collapsed deterministically;
-- no empty strings after trimming.
+- no empty strings after trimming;
+- duplicate normalized severity/category/location/title findings collapse deterministically.
 
 ### 9.4 Summary
-
-Canonical response:
 
 ```ts
 interface SopQualityReviewResult {
@@ -244,41 +253,37 @@ interface SopQualityReviewResult {
 }
 ```
 
-`summary` is 10–1500 trimmed characters.
+`summary`: 10–1500 trimmed characters.
 
-The status is an **advisory quality summary**, not approval. The UI must label it accordingly and show a persistent warning that AI findings require human judgment.
+Status is an **advisory quality summary**, not approval. UI always communicates that findings require human judgment.
 
-To avoid arbitrary provider scoring semantics, Iteration 5 does not expose a numeric `0–100` score. This keeps the product from implying false precision or formal compliance.
+Iteration 5 intentionally has no numeric 0–100 score to avoid false precision or an implied compliance grade.
 
 ## 10. Canonicalization and Application Validation
 
-Provider output is parsed as `unknown` and then validated by an application schema.
+Provider output enters the application as `unknown` and must pass an application schema.
 
 Validation includes:
 
 - exact status enum;
 - exact severity/category/location enums;
-- field length and trimming rules;
-- maximum finding count;
-- valid step references against the server snapshot;
-- valid normalized actor references against the server snapshot;
+- length/count/trim rules;
+- valid step references against the exact reviewed snapshot;
+- valid normalized actor references against the exact reviewed snapshot;
 - deterministic duplicate collapse;
-- no provider-supplied DB IDs;
-- no unknown location shape reaching the client.
+- no provider-supplied database IDs;
+- no unknown location shapes reaching the client.
 
-Invalid structured output results in a safe `422` response suggesting the user retry the review. It does not modify SOP data.
+Invalid structured output returns safe `422` retry-oriented behavior and never changes SOP data.
 
-The application must not silently drop structurally invalid references in a way that could mislead the user. Either canonicalize an explicitly safe duplicate/whitespace case or reject the result.
+Only explicitly safe normalization such as whitespace trimming and duplicate collapse may be repaired automatically. Invalid structural references are rejected, not silently dropped.
 
 ## 11. Server Architecture
 
-### 11.1 Module
-
-Add a focused module under the SOP domain, conceptually:
+Add a focused module under SOP domain, conceptually:
 
 ```text
 server/src/modules/sop/ai-review/
-  dto/
   providers/
     ai-review-provider.ts
     disabled-ai-review.provider.ts
@@ -291,13 +296,11 @@ server/src/modules/sop/ai-review/
   sop-ai-review.types.ts
 ```
 
-Exact file names may be adjusted to repository naming conventions during implementation planning, but responsibilities must remain isolated.
+Exact filenames may follow repository conventions during planning, but responsibilities remain isolated.
 
-### 11.2 Provider interface
+### 11.1 Provider interface
 
-Do not overload `AiDraftProvider.generate()` with review behavior. Draft generation and quality review have different input/output contracts and should remain independently testable.
-
-Conceptual interface:
+Draft generation and quality review have different contracts and remain separate:
 
 ```ts
 interface AiReviewProvider {
@@ -305,33 +308,29 @@ interface AiReviewProvider {
 }
 ```
 
-The production implementation may reuse shared low-level OpenAI transport helpers if extraction is small and clearly beneficial, but the draft and review domain interfaces remain separate.
+A small low-level OpenAI transport helper may be shared later if code inspection proves it clearly reduces duplication, but `AiDraftProvider` and `AiReviewProvider` remain separate domain interfaces.
 
-### 11.3 Repository
+### 11.2 Repository
 
-`SopAiReviewRepository` is read-only. It loads the complete review snapshot needed by the service from the current SOP detail and related actors/steps/lampiran.
+`SopAiReviewRepository` is read-only. It loads the current SOP detail plus actors, steps, and supporting arrays needed for review.
 
-No review path method may create/update/delete application rows.
+No review repository/service method may create, update, or delete application rows.
 
-### 11.4 Service
+### 11.3 Service
 
 `SopAiReviewService` owns:
 
 1. provider availability;
-2. ownership/eligibility orchestration;
-3. loading the authoritative persisted snapshot;
-4. mapping database entities to provider-safe review context;
-5. calling the configured review provider;
-6. validating/canonicalizing provider output against that snapshot;
-7. safe application error mapping.
+2. ownership and DRAFT eligibility;
+3. loading authoritative persisted snapshot;
+4. mapping it to provider-safe context;
+5. provider invocation;
+6. canonicalization/validation against the exact snapshot;
+7. safe error mapping.
 
-The service does not edit SOP data.
+### 11.4 Authorization
 
-### 11.5 Authorization
-
-All quality-review endpoints require the same authenticated owner boundary used by the existing workspace/SOP authoring flow.
-
-Ownership is checked server-side before snapshot data is returned to or processed by a provider.
+All review endpoints require the existing authenticated owner boundary. Ownership is checked before SOP content can be sent to a provider.
 
 ## 12. API Design
 
@@ -341,13 +340,13 @@ Ownership is checked server-side before snapshot data is returned to or processe
 GET /sop/ai-reviews/availability
 ```
 
-Authenticated response data:
+Response data:
 
 ```ts
 { enabled: boolean }
 ```
 
-The endpoint reveals no API key, model name, or provider credential details.
+It reveals no provider, model, key, or credential detail.
 
 ### 12.2 Review current draft
 
@@ -355,18 +354,19 @@ The endpoint reveals no API key, model name, or provider credential details.
 POST /sop/:detailSopId/ai-review
 ```
 
-No SOP document body is accepted.
+Request has no SOP document body.
 
-The server:
+Server sequence:
 
-1. authenticates the user;
-2. resolves the `detailSopId` and owning workspace/SOP;
-3. verifies ownership;
-4. verifies current editable `DRAFT` eligibility;
-5. loads the latest persisted snapshot;
-6. invokes the provider;
-7. validates result against the exact snapshot;
-8. returns transient review data.
+1. authenticate user;
+2. resolve target detail and owning SOP/workspace;
+3. assert ownership;
+4. assert current status `DRAFT`;
+5. load latest persisted snapshot;
+6. map to provider-safe context without DB IDs;
+7. invoke provider;
+8. validate output against the same snapshot;
+9. return transient result.
 
 Response data:
 
@@ -378,171 +378,178 @@ Response data:
 }
 ```
 
-The response intentionally does not create a review ID because nothing is persisted.
+`reviewedDetailSopId` is returned by the application for client correlation; it is not sent to the model.
+
+No review ID exists because review state is not persisted.
 
 ## 13. Provider and Runtime Configuration
 
-Iteration 5 reuses the existing AI deployment philosophy from Iteration 4.
+Keep Iteration 4 draft-generation configuration unchanged.
 
-Preferred configuration:
+Iteration 5 adds:
 
-- keep existing `AI_DRAFT_PROVIDER=disabled|openai|fake` behavior untouched;
-- introduce `AI_REVIEW_PROVIDER=disabled|openai|fake`, default `disabled`;
-- `fake` remains allowed only outside production;
-- production `openai` requires existing server-side `OPENAI_API_KEY` and `OPENAI_MODEL`;
-- reuse `AI_DRAFT_TIMEOUT_MS` only if naming remains semantically acceptable after code inspection; otherwise introduce a general `AI_PROVIDER_TIMEOUT_MS` through a deliberately backward-compatible config change. Do not rename working production config casually.
+```text
+AI_REVIEW_PROVIDER=disabled|openai|fake
+AI_REVIEW_TIMEOUT_MS=30000
+```
 
-The implementation plan must choose the least disruptive option after inspecting configuration consumers.
+Rules:
 
-### OpenAI behavior
+- default `AI_REVIEW_PROVIDER=disabled`;
+- `fake` allowed only in test/development and rejected in production;
+- `openai` requires existing server-side `OPENAI_API_KEY` and `OPENAI_MODEL`;
+- `AI_REVIEW_TIMEOUT_MS` is integer range `5000..60000`, default `30000`;
+- do not rename or repurpose `AI_DRAFT_TIMEOUT_MS` in this iteration.
 
-The production review adapter uses backend-only OpenAI Responses API behavior consistent with Iteration 4:
+This keeps review rollout independent and avoids breaking existing Iteration 4 production configuration.
 
-- runtime model from server configuration;
+### 13.1 OpenAI review adapter
+
+Production review adapter follows the same security posture as Iteration 4:
+
+- backend-only OpenAI Responses API;
+- runtime model from `OPENAI_MODEL`;
 - `store: false`;
 - strict JSON Schema Structured Outputs;
-- no web search, file search, function calls, or external tools;
-- bounded timeout;
-- provider errors sanitized before returning to the client;
-- no full prompt or full response logged during ordinary application operation;
-- model is explicitly told not to invent legal/regulatory compliance claims.
+- no web search, file search, function calling, or external tools;
+- bounded timeout from `AI_REVIEW_TIMEOUT_MS`;
+- no API key, full prompt, or full response in ordinary logs;
+- sanitized upstream failures;
+- explicit instruction not to invent regulations or legal/compliance claims.
 
 ## 14. Prompt Construction and Privacy
 
-The server sends only content needed to review the SOP snapshot.
+Provider input contains only SOP content required for quality review.
 
 Do not include:
 
 - access tokens/cookies;
-- user email or account profile data;
-- workspace/database IDs not needed by the model;
-- actor database IDs;
+- user email/profile data;
+- `detailSopId`;
+- workspace/user IDs;
+- actor IDs;
 - internal step IDs;
-- audit log rows;
-- unrelated workspace SOPs;
+- audit logs;
+- unrelated SOPs;
 - hidden application metadata.
 
-The prompt should state that:
+Prompt states that:
 
-- input represents user-authored administrative procedure data;
+- input is user-authored administrative procedure content;
 - review is advisory;
-- the model must use only supplied content;
-- it must not assert legal compliance or invent regulations;
-- it must return findings only through the structured schema.
+- model must use only supplied data;
+- model must not assert legal compliance or invent regulations;
+- output must follow the strict structured schema.
 
 ## 15. Error Handling
 
-Expected mapping:
+Lock the external-error behavior as follows:
 
-- AI review disabled: `503` with a safe availability message;
-- provider timeout/network/unavailable/rate-limit: safe `503` (or existing provider-rate-limit convention if intentionally shared); no raw upstream body;
-- refusal/incomplete/invalid structured output: `422` with retry-oriented message;
-- invalid or missing detail identifier: existing application `400/404` convention;
+- review disabled: `503`;
+- provider timeout/network/unavailable: `503`;
+- upstream provider rate limit: `429`, consistent with existing OpenAI draft transport behavior;
+- refusal/incomplete/invalid structured output: `422`;
+- malformed identifier/request: existing `400` convention;
+- target not found: existing `404` convention;
 - ownership violation: existing authorization behavior;
-- non-DRAFT/ineligible SOP: `409` or existing state-conflict convention;
-- autosave failure is handled on client before review call when known; server still reviews only persisted data;
-- provider failure never changes SOP persistence.
+- non-DRAFT/ineligible SOP: `409` state conflict;
+- known client autosave failure: client blocks review before request;
+- any provider failure: zero SOP mutation.
 
-Exact HTTP exception classes should follow existing NestJS conventions during implementation.
+User-facing errors never expose raw provider response bodies.
 
 ## 16. Client UX
 
 ### 16.1 Entry point
 
-Add `Periksa dengan AI` to the existing editable SOP editor, near document-level actions rather than creating a separate AI page.
+Add `Periksa dengan AI` to document-level actions in the existing editable SOP editor. Do not create a second editor or separate AI workflow page.
 
-When AI review is unavailable, the action is hidden or visibly disabled according to existing availability UX conventions. It must not block normal editor use.
+When review is unavailable, action is hidden or visibly disabled according to existing availability patterns. Normal editing remains unaffected.
 
-### 16.2 Review lifecycle
+### 16.2 Transient lifecycle
 
-Client transient state:
-
-```ts
+```text
 idle -> waiting-for-save -> reviewing -> success | error
 ```
 
-The client keeps only the current transient review result. Refresh/navigation clears it.
+Only current review state lives in client memory. Refresh/navigation clears it.
 
-When the user modifies the SOP after a successful review, the previous findings become potentially stale. The UI must visibly mark the review as stale or clear it once editor data changes after the reviewed snapshot. It must not continue presenting old findings as if they apply to the new draft state.
-
-The simplest acceptable implementation is to clear the current result on the first post-review editor change.
+After a successful review, any subsequent SOP edit makes the result potentially stale. The default Iteration 5 behavior is to **clear the current result on the first post-review editor change**. This avoids presenting old findings as current and avoids adding revision hashes/history.
 
 ### 16.3 Review panel
 
-The panel displays:
+Panel displays:
 
 - advisory status badge;
 - summary;
 - counts by severity;
-- findings grouped or filterable by severity;
-- location label such as `Langkah 4`, `Peringatan`, or actor name;
-- title, explanation, and recommendation;
-- visible statement that AI findings require human review.
+- findings grouped/filterable by severity;
+- location label (`Langkah 4`, `Peringatan`, actor name, etc.);
+- title, explanation, recommendation;
+- persistent notice that AI findings require human review.
 
-Clicking a finding should focus/navigate to the related existing editor section when a stable mapping already exists or can be added without restructuring the editor. At minimum, step findings must expose their step number clearly. Implementation planning must avoid a large editor-navigation refactor solely to support deep-link polish.
+Step findings must clearly expose step order. Clicking a finding may focus an existing editor section only if a stable mapping can be added without a large editor-navigation refactor. Deep-link polish is not allowed to broaden scope.
 
 ### 16.4 No auto-fix
 
-There is no `Terapkan Perbaikan`, one-click patch, or write-back action in Iteration 5.
+No `Terapkan Perbaikan`, patch, or AI write-back action exists in Iteration 5. User changes data manually through existing editor controls.
 
-Users make corrections manually through existing controls, preserving current validation/autosave/locking semantics.
+## 17. Completion and Versioning
 
-## 17. Interaction with Completion and Versioning
-
-AI review is advisory and does not become a prerequisite for `Complete` in Iteration 5.
+AI review is advisory and is **not** a prerequisite for `Complete`.
 
 Reasons:
 
-- the provider can be disabled or unavailable;
-- AI findings are probabilistic;
-- existing product completion rules are deterministic application-domain rules;
-- making review mandatory would silently turn an optional AI service into an approval gate.
+- provider may be disabled/unavailable;
+- findings are probabilistic;
+- deterministic application validation remains authoritative;
+- making review mandatory would silently turn optional AI into an approval gate.
 
-After a SOP is completed, its existing immutable behavior remains unchanged. `Create New Version` creates an editable draft as today, and that new draft can then be reviewed independently.
+After completion, existing immutability is unchanged. `Create New Version` creates a new editable draft as today; that new draft can be reviewed independently.
 
-No AI review result is copied between versions because review state is transient.
+Review result is not copied across versions because it is transient.
 
 ## 18. Testing Strategy
 
-### 18.1 Server unit/contract tests
+### 18.1 Server
 
-Required coverage includes:
+Required coverage:
 
 - availability enabled/disabled;
 - ownership enforced before provider invocation;
-- non-DRAFT review rejected;
-- authoritative repository snapshot mapping;
-- actor and step database IDs excluded from provider input;
-- exact review schema parsing;
+- non-DRAFT rejected;
+- authoritative persisted snapshot mapping;
+- provider context excludes all DB IDs;
+- exact schema parsing;
 - trim/length/count limits;
 - invalid step location rejected;
 - invalid actor location rejected;
 - deterministic duplicate collapse;
-- refusal/incomplete/invalid structured output mapping;
+- refusal/incomplete/invalid output mapping;
 - timeout/network/rate-limit mapping;
-- provider disabled behavior;
-- no write methods called during review orchestration;
-- OpenAI request uses strict JSON Schema, `store: false`, no tools/retrieval;
-- provider error bodies are not exposed.
+- disabled provider behavior;
+- review orchestration performs no database writes;
+- OpenAI request uses strict schema, `store: false`, no tools/retrieval;
+- raw provider body not exposed.
 
-### 18.2 Client tests
+### 18.2 Client
 
-Required coverage includes:
+Required coverage:
 
-- `Periksa dengan AI` availability state;
-- review action waits for/blocks on pending autosave;
-- review does not run when latest save is known failed;
-- request contains target identifier rather than arbitrary SOP body;
+- availability state;
+- review waits for/blocks on pending autosave;
+- review blocked when latest save is known failed;
+- request contains target identifier only, not SOP body;
 - loading/error/success states;
-- severity counts and finding rendering;
-- visible advisory warning;
-- review result cleared/marked stale after subsequent editor change;
-- no auto-fix mutation action;
-- normal editor actions remain available when AI disabled.
+- severity counts/findings render correctly;
+- advisory warning visible;
+- review result clears after post-review edit;
+- no auto-fix action;
+- normal editor remains usable when AI disabled.
 
 ### 18.3 E2E
 
-Mandatory deterministic fake-provider journey:
+Deterministic fake-provider journey:
 
 ```text
 create/open DRAFT
@@ -550,68 +557,68 @@ create/open DRAFT
   -> wait for autosave
   -> Periksa dengan AI
   -> structured findings appear
-  -> verify SOP data was not mutated by review
-  -> manually change one field/step
+  -> prove review did not mutate SOP data
+  -> manually edit one field/step
+  -> old review clears
   -> autosave/reload proves manual edit persisted
-  -> old review becomes stale/cleared
   -> review again
   -> continue Flowchart/BPMN
   -> Complete
   -> Create New Version
 ```
 
-Existing blank/template/AI-draft journeys remain mandatory regression coverage as appropriate to CI runtime. The implementation plan may extend an existing journey rather than multiply redundant long E2E tests, as long as all creation sources remain covered somewhere in the mandatory suite.
+Existing blank/template/AI-draft creation sources remain mandatory regression coverage. Implementation plan may extend existing journeys rather than duplicate long end-to-end flows if the same acceptance surface stays covered.
 
 ### 18.4 Production contract
 
-Production verification must prove:
+Production checks prove:
 
-- application boots with `AI_REVIEW_PROVIDER=disabled` and no additional credential requirement;
-- `AI_REVIEW_PROVIDER=fake` is rejected in production configuration;
-- enabling review does not change database migration requirements;
-- no live/paid provider is invoked by CI.
+- application boots with `AI_REVIEW_PROVIDER=disabled` and no new credential requirement;
+- production rejects `AI_REVIEW_PROVIDER=fake`;
+- `AI_REVIEW_TIMEOUT_MS` validation works;
+- no migration is added;
+- CI never calls live/paid AI.
 
 ## 19. Acceptance Criteria
 
-Iteration 5 is complete when all of the following are true:
+Iteration 5 is complete only when:
 
-1. authenticated owner of an editable SOP `DRAFT` can trigger `Periksa dengan AI` from the existing editor;
-2. review waits for the current autosave boundary so it does not intentionally review known-stale client state;
-3. browser sends only the target detail identifier, while server loads the authoritative persisted SOP snapshot;
-4. provider receives no actor IDs/internal step IDs or unrelated account/workspace data;
-5. provider returns strict structured findings that are validated against the exact snapshot;
-6. findings use `ERROR`, `WARNING`, or `SUGGESTION` and valid location/category contracts;
-7. review never mutates SOP data;
-8. user can manually correct the SOP through the existing editor and autosave path;
-9. existing review result becomes stale/cleared after post-review edits;
-10. AI review remains advisory and does not become a completion/approval gate;
-11. no regulation lookup/compliance certification is introduced;
-12. no Prisma migration or persisted review history is introduced;
-13. AI disabled/provider failure does not break normal authoring, diagrams, PDF, completion, or versioning;
-14. mandatory CI uses a deterministic fake provider and no paid/live AI call;
-15. server, client, E2E, and production-compose mandatory checks are green before merge.
+1. authenticated owner of editable SOP `DRAFT` can trigger `Periksa dengan AI` in the existing editor;
+2. review respects settled autosave boundary;
+3. browser sends only target identifier and server loads authoritative persisted SOP;
+4. provider input contains no application DB IDs or unrelated account/workspace data;
+5. provider result is strict structured output validated against the exact reviewed snapshot;
+6. findings use valid severity/category/location contracts;
+7. invalid actor/step references are rejected;
+8. review performs zero SOP mutation;
+9. user manually corrects data through existing editor/autosave;
+10. old result clears after a post-review edit;
+11. review remains advisory and never becomes completion/approval gate;
+12. no regulation lookup/compliance certification is introduced;
+13. no Prisma migration or persisted AI review/history/job is introduced;
+14. disabled/failing AI does not break normal authoring, diagrams, PDF, completion, or versioning;
+15. mandatory CI uses deterministic fake provider with no paid/live call;
+16. server, client, E2E, and production-compose mandatory checks are green before merge.
 
-## 20. Implementation Boundaries to Preserve
+## 20. Scope Guard
 
-During implementation, do not broaden the iteration into:
+Do not broaden implementation into:
 
 - inline AI rewrite;
 - automatic fix application;
-- persisted AI history;
-- workflow approval/evaluation;
+- persisted review history;
+- approval/evaluation workflow;
 - collaboration;
 - regulation retrieval;
 - generic chat assistant;
 - model/settings UI;
 - unrelated editor refactor.
 
-If implementation discovers that the existing autosave architecture cannot safely expose a settled-save boundary without major restructuring, stop and upgrade/review the design rather than silently creating a second save path.
-
 ## 21. Design Decision Summary
 
-Iteration 5 adds a read-only AI quality-review layer to the existing SOP authoring lifecycle. It reviews only a server-loaded persisted `DRAFT` snapshot, returns transient schema-validated advisory findings, never writes SOP data, and leaves all corrections to the existing editor and autosave behavior.
+Iteration 5 adds a read-only AI quality-review layer to the existing SOP authoring lifecycle. It reviews a server-loaded persisted `DRAFT`, strips database IDs before provider invocation, returns transient schema-validated advisory findings, never writes SOP data, and leaves corrections to the existing editor/autosave flow.
 
-This intentionally creates a clean progression:
+Product progression remains deliberately narrow:
 
 ```text
 Iteration 3: deterministic starting point
@@ -619,4 +626,4 @@ Iteration 4: AI-assisted generation
 Iteration 5: AI-assisted quality review
 ```
 
-A future iteration may add carefully scoped AI-assisted corrections, but only after the review contract proves stable and only with a separate design for mutation, conflict handling, and user confirmation.
+A future iteration may consider carefully scoped AI-assisted correction, but only under a separate mutation/conflict/confirmation design after this review contract is proven stable.
