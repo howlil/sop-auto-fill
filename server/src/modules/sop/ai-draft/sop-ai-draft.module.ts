@@ -6,6 +6,7 @@ import { SopCatalogModule } from '../catalog/sop-catalog.module';
 import { AI_DRAFT_PROVIDER } from './providers/ai-draft-provider';
 import { DisabledAiDraftProvider } from './providers/disabled-ai-draft.provider';
 import { FakeAiDraftProvider } from './providers/fake-ai-draft.provider';
+import { OpenAiDraftProvider } from './providers/openai-draft.provider';
 import { SopAiDraftController } from './sop-ai-draft.controller';
 import { SopAiDraftRepository } from './sop-ai-draft.repository';
 import { SopAiDraftService } from './sop-ai-draft.service';
@@ -18,14 +19,21 @@ import { SopAiDraftService } from './sop-ai-draft.service';
     SopAiDraftService,
     DisabledAiDraftProvider,
     FakeAiDraftProvider,
+    OpenAiDraftProvider,
     {
       provide: AI_DRAFT_PROVIDER,
-      inject: [ConfigService, DisabledAiDraftProvider, FakeAiDraftProvider],
+      inject: [ConfigService, DisabledAiDraftProvider, FakeAiDraftProvider, OpenAiDraftProvider],
       useFactory: (
         config: ConfigService,
         disabled: DisabledAiDraftProvider,
         fake: FakeAiDraftProvider,
-      ) => (config.get<string>('AI_DRAFT_PROVIDER') === 'fake' ? fake : disabled),
+        openai: OpenAiDraftProvider,
+      ) => {
+        const mode = config.get<string>('AI_DRAFT_PROVIDER') ?? 'disabled';
+        if (mode === 'fake') return fake;
+        if (mode === 'openai') return openai;
+        return disabled;
+      },
     },
   ],
 })

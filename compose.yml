@@ -41,6 +41,10 @@ services:
       ALLOWED_ORIGINS: ${PUBLIC_APP_ORIGIN:?PUBLIC_APP_ORIGIN is required}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       SOP_PDF_STORAGE_DIR: /app/storage/sop-pdf
+      AI_DRAFT_PROVIDER: ${AI_DRAFT_PROVIDER:-disabled}
+      AI_DRAFT_TIMEOUT_MS: ${AI_DRAFT_TIMEOUT_MS:-30000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
     volumes:
       - sop_pdf_data:/app/storage/sop-pdf
     depends_on:
