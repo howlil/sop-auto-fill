@@ -1,12 +1,12 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Plus, Users } from "lucide-react";
+import { ArrowLeft, FileText, Plus, Sparkles, Users } from "lucide-react";
 import { pelaksanaApi } from "@/api/pelaksana";
 import { workspaceApi } from "@/api/workspaces";
-import { workspaceSopApi } from "@/api/workspace-sops";
+import { workspaceSopApi, type AiDraftProposal } from "@/api/workspace-sops";
 import { queryClient } from "@/config/query-client";
 
-type CreateSource = "blank" | "template";
+type CreateSource = "blank" | "template" | "ai";
 
 export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   const [createSource, setCreateSource] = useState<CreateSource>("blank");
@@ -15,6 +15,10 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   const [nomorSop, setNomorSop] = useState("");
   const [namaLembaga, setNamaLembaga] = useState("");
   const [namaPelaksana, setNamaPelaksana] = useState("");
+  const [deskripsiProses, setDeskripsiProses] = useState("");
+  const [tujuanProses, setTujuanProses] = useState("");
+  const [catatanTambahan, setCatatanTambahan] = useState("");
+  const [aiProposal, setAiProposal] = useState<AiDraftProposal | null>(null);
 
   const workspace = useQuery({
     queryKey: ["workspace", workspaceId],
@@ -38,12 +42,31 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
     queryFn: () => workspaceSopApi.previewTemplate(selectedTemplateId, workspaceId),
     enabled: createSource === "template" && selectedTemplateId.length > 0,
   });
+  const aiAvailability = useQuery({
+    queryKey: ["sop-ai-draft-availability"],
+    queryFn: () => workspaceSopApi.aiDraftAvailability(),
+    enabled: createSource === "ai",
+  });
 
   const createPelaksana = useMutation({
     mutationFn: () => pelaksanaApi.create(workspaceId, namaPelaksana.trim()),
     onSuccess: async () => {
       setNamaPelaksana("");
       await queryClient.invalidateQueries({ queryKey: ["workspace-pelaksana", workspaceId] });
+    },
+  });
+
+  const generateAiDraft = useMutation({
+    mutationFn: () =>
+      workspaceSopApi.generateAiDraft({
+        workspaceId,
+        deskripsiProses: deskripsiProses.trim(),
+        ...(tujuanProses.trim() ? { tujuanProses: tujuanProses.trim() } : {}),
+        ...(catatanTambahan.trim() ? { catatanTambahan: catatanTambahan.trim() } : {}),
+      }),
+    onSuccess: (response) => {
+      setAiProposal(response.data.proposal);
+      setJudul(response.data.proposal.suggestedTitle);
     },
   });
 
@@ -58,6 +81,16 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
           namaLembaga: namaLembaga.trim(),
         });
       }
+      if (createSource === "ai") {
+        if (!aiProposal) throw new Error("Draft AI belum digenerate");
+        return workspaceSopApi.createFromAiDraft({
+          workspaceId,
+          judul: judul.trim(),
+          nomorSop: nomorSop.trim(),
+          namaLembaga: namaLembaga.trim(),
+          proposal: aiProposal,
+        });
+      }
       return workspaceSopApi.create({
         workspaceId,
         judul: judul.trim(),
@@ -68,6 +101,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
       setJudul("");
       setNomorSop("");
       setNamaLembaga("");
+      setAiProposal(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace-sops", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["workspace-pelaksana", workspaceId] }),
@@ -92,26 +126,40 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
     ) {
       return;
     }
+    if (createSource === "ai" && (!aiProposal || !namaLembaga.trim())) return;
     void createSop.mutateAsync();
+  };
+
+  const onGenerateAiDraft = () => {
+    if (deskripsiProses.trim().length < 20 || aiAvailability.data?.data.enabled !== true) return;
+    void generateAiDraft.mutateAsync();
+  };
+
+  const invalidateAiProposal = () => {
+    setAiProposal(null);
   };
 
   const switchCreateSource = (source: CreateSource) => {
     setCreateSource(source);
-    if (source === "blank") {
-      setSelectedTemplateId("");
-      setNamaLembaga("");
-    }
+    setSelectedTemplateId("");
+    setAiProposal(null);
+    if (source === "blank") setNamaLembaga("");
   };
 
   const items = sops.data?.data ?? [];
   const pelaksanaItems = pelaksana.data?.data ?? [];
   const templateItems = templates.data?.data ?? [];
   const preview = templatePreview.data?.data;
+  const aiEnabled = aiAvailability.data?.data.enabled === true;
   const canCreate =
     judul.trim().length > 0 &&
     nomorSop.trim().length > 0 &&
     (createSource === "blank" ||
-      (selectedTemplateId.length > 0 && namaLembaga.trim().length > 0 && templatePreview.isSuccess));
+      (createSource === "template" &&
+        selectedTemplateId.length > 0 &&
+        namaLembaga.trim().length > 0 &&
+        templatePreview.isSuccess) ||
+      (createSource === "ai" && aiProposal !== null && namaLembaga.trim().length > 0));
 
   return (
     <main className="min-h-screen bg-surface-subtle">
@@ -175,7 +223,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
         <section className="mb-8 rounded-xl border border-border bg-background p-5" aria-labelledby="create-sop-title">
           <div className="mb-4">
             <h2 id="create-sop-title" className="font-semibold text-foreground">Buat SOP</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Mulai dari dokumen kosong atau gunakan template sistem sebagai titik awal.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Mulai dari dokumen kosong, template sistem, atau draft terstruktur dari deskripsi proses.</p>
           </div>
 
           <div className="mb-5 inline-flex rounded-lg border border-border bg-surface-subtle p-1" role="group" aria-label="Sumber pembuatan SOP">
@@ -194,6 +242,14 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
               className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "template" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
               Dari Template
+            </button>
+            <button
+              type="button"
+              aria-pressed={createSource === "ai"}
+              onClick={() => switchCreateSource("ai")}
+              className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "ai" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              Dengan AI
             </button>
           </div>
 
@@ -260,6 +316,128 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
             </div>
           ) : null}
 
+          {createSource === "ai" ? (
+            <div className="mb-5 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-sm font-medium text-foreground md:col-span-2">
+                  Deskripsi proses
+                  <textarea
+                    value={deskripsiProses}
+                    onChange={(event) => {
+                      setDeskripsiProses(event.target.value);
+                      invalidateAiProposal();
+                    }}
+                    placeholder="Jelaskan siapa yang terlibat, aktivitas utama, keputusan, input, dan hasil proses."
+                    maxLength={8000}
+                    rows={5}
+                    className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-foreground">
+                  Tujuan proses (opsional)
+                  <textarea
+                    value={tujuanProses}
+                    onChange={(event) => {
+                      setTujuanProses(event.target.value);
+                      invalidateAiProposal();
+                    }}
+                    maxLength={2000}
+                    rows={3}
+                    className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-foreground">
+                  Catatan tambahan (opsional)
+                  <textarea
+                    value={catatanTambahan}
+                    onChange={(event) => {
+                      setCatatanTambahan(event.target.value);
+                      invalidateAiProposal();
+                    }}
+                    maxLength={2000}
+                    rows={3}
+                    className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+              </div>
+
+              {aiAvailability.isLoading ? (
+                <p className="text-sm text-muted-foreground">Memeriksa ketersediaan AI drafting...</p>
+              ) : null}
+              {aiAvailability.isError ? (
+                <p className="text-sm text-destructive">Status AI drafting tidak dapat diperiksa.</p>
+              ) : null}
+              {aiAvailability.isSuccess && !aiEnabled ? (
+                <p className="text-sm text-muted-foreground">AI drafting belum diaktifkan pada server. SOP kosong dan template tetap dapat digunakan.</p>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={onGenerateAiDraft}
+                disabled={!aiEnabled || generateAiDraft.isPending || deskripsiProses.trim().length < 20}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" />
+                {generateAiDraft.isPending ? "Generating..." : "Generate Draft"}
+              </button>
+              {generateAiDraft.isError ? (
+                <p className="text-sm text-destructive">Draft AI gagal dibuat. Periksa deskripsi lalu coba lagi.</p>
+              ) : null}
+
+              {aiProposal ? (
+                <div className="space-y-4 rounded-lg border border-border bg-surface-subtle p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-foreground">{aiProposal.suggestedTitle}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Konten ini dihasilkan AI dan harus ditinjau sebelum digunakan.</p>
+                    </div>
+                    <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                      {aiProposal.steps.length} langkah
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor dipakai ulang</p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {aiProposal.actorsToReuse.length > 0
+                          ? aiProposal.actorsToReuse.map((actor) => actor.name).join(", ")
+                          : "Tidak ada"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor baru</p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {aiProposal.actorsToCreate.length > 0 ? aiProposal.actorsToCreate.join(", ") : "Tidak ada"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preview langkah</p>
+                    <ol className="mt-2 space-y-2">
+                      {aiProposal.steps.map((step) => (
+                        <li key={step.urutan} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+                          <span className="font-medium">{step.urutan}. {step.kegiatan}</span>
+                          <span className="ml-2 text-muted-foreground">{step.actorName}</span>
+                          {step.jenis === "KEPUTUSAN" ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              Ya → {step.targetYaUrutan ?? "-"}, Tidak → {step.targetTidakUrutan ?? "-"}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Lampiran awal: {aiProposal.peringatan.length} peringatan, {aiProposal.kualifikasiPelaksanaan.length} kualifikasi, {aiProposal.peralatanPerlengkapan.length} peralatan, {aiProposal.pencatatanPendataan.length} pencatatan.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
             <input
               value={judul}
@@ -275,7 +453,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
               maxLength={255}
               className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
-            {createSource === "template" ? (
+            {createSource === "template" || createSource === "ai" ? (
               <input
                 value={namaLembaga}
                 onChange={(event) => setNamaLembaga(event.target.value)}
@@ -291,7 +469,11 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
-                {createSource === "template" ? "Buat dari Template" : "Buat SOP"}
+                {createSource === "template"
+                  ? "Buat dari Template"
+                  : createSource === "ai"
+                    ? "Buat Draft SOP"
+                    : "Buat SOP"}
               </button>
               {createSop.isError ? <p className="text-sm text-destructive">Gagal membuat SOP.</p> : null}
             </div>
