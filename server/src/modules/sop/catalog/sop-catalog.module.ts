@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../../core/auth/auth.module';
 import { WorkspaceModule } from '../../workspace/workspace.module';
+import { SopDraftInstantiationService } from '../draft/sop-draft-instantiation.service';
 import { SopTemplateController } from '../template/sop-template.controller';
 import { SopTemplateRepository } from '../template/sop-template.repository';
 import { SopTemplateService } from '../template/sop-template.service';
@@ -16,7 +17,8 @@ import { SopCatalogService } from './sop-catalog.service';
     SopCatalogRepository,
     SopTemplateService,
     SopTemplateRepository,
+    SopDraftInstantiationService,
   ],
-  exports: [SopCatalogService, SopCatalogRepository],
+  exports: [SopCatalogService, SopCatalogRepository, SopDraftInstantiationService],
 })
 export class SopCatalogModule {}

@@ -9,7 +9,10 @@ const criticalAudit = process.env.E2E_CRITICAL === 'true'
 
 export default defineConfig({
   testDir: fileURLToPath(new URL('./e2e', import.meta.url)),
-  testMatch: ['journeys/mvp-vertical-slice.spec.ts'],
+  testMatch: [
+    'journeys/mvp-vertical-slice.spec.ts',
+    'journeys/ai-assisted-draft.spec.ts',
+  ],
   globalSetup: fileURLToPath(new URL('./e2e/global-setup.ts', import.meta.url)),
   timeout: 60_000,
   expect: {

@@ -82,13 +82,14 @@ function makeService() {
     listActiveTemplates: jest.fn(),
     findActiveTemplateById: jest.fn(),
     findWorkspaceActors: jest.fn(),
-    instantiateTemplate: jest.fn(),
   };
   const workspace = { assertOwner: jest.fn().mockResolvedValue(undefined) };
+  const draftInstantiation = { instantiate: jest.fn() };
   return {
-    service: new SopTemplateService(repository as any, workspace as any),
+    service: new SopTemplateService(repository as any, workspace as any, draftInstantiation as any),
     repository,
     workspace,
+    draftInstantiation,
   };
 }
 
@@ -111,7 +112,7 @@ describe('SopTemplateService', () => {
   });
 
   it('preview memvalidasi ownership dan memisahkan aktor reuse/create tanpa mutation', async () => {
-    const { service, repository, workspace } = makeService();
+    const { service, repository, workspace, draftInstantiation } = makeService();
     repository.findActiveTemplateById.mockResolvedValue(template);
     repository.findWorkspaceActors.mockResolvedValue([
       { pelaksanaId: 'actor-1', nama: 'petugas layanan' },
@@ -129,7 +130,7 @@ describe('SopTemplateService', () => {
     });
 
     expect(workspace.assertOwner).toHaveBeenCalledWith('user-1', 'workspace-1');
-    expect(repository.instantiateTemplate).not.toHaveBeenCalled();
+    expect(draftInstantiation.instantiate).not.toHaveBeenCalled();
   });
 
   it('menyembunyikan template yang tidak aktif atau tidak ditemukan', async () => {
@@ -141,10 +142,10 @@ describe('SopTemplateService', () => {
     );
   });
 
-  it('membuat draft melalui repository setelah ownership dan integritas template valid', async () => {
-    const { service, repository, workspace } = makeService();
+  it('membuat draft melalui shared instantiator setelah ownership dan integritas template valid', async () => {
+    const { service, repository, workspace, draftInstantiation } = makeService();
     repository.findActiveTemplateById.mockResolvedValue(template);
-    repository.instantiateTemplate.mockResolvedValue({
+    draftInstantiation.instantiate.mockResolvedValue({
       sopId: 'sop-1',
       detailSopId: 'detail-1',
       workspaceId: 'workspace-1',
@@ -166,8 +167,18 @@ describe('SopTemplateService', () => {
     });
 
     expect(workspace.assertOwner).toHaveBeenCalledWith('user-1', 'workspace-1');
-    expect(repository.instantiateTemplate).toHaveBeenCalledWith({
-      template: expect.objectContaining({ templateId: 'template-1' }),
+    expect(draftInstantiation.instantiate).toHaveBeenCalledWith({
+      definition: {
+        peringatan: ['Pastikan persyaratan lengkap'],
+        kualifikasiPelaksanaan: [],
+        peralatanPerlengkapan: ['Komputer'],
+        pencatatanPendataan: [],
+        actorNames: ['Petugas Layanan', 'Pelaksana Layanan'],
+        steps: expect.arrayContaining([
+          expect.objectContaining({ urutan: 1, actorName: 'Petugas Layanan' }),
+          expect.objectContaining({ urutan: 2, actorName: 'Pelaksana Layanan' }),
+        ]),
+      },
       workspaceId: 'workspace-1',
       userId: 'user-1',
       judul: 'SOP Pelayanan',

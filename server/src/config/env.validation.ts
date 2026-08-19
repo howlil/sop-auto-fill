@@ -11,6 +11,13 @@ const envBoolean = (defaultValue: boolean) =>
   }, z.boolean().default(defaultValue));
 
 const trimmed = (value: unknown) => (typeof value === 'string' ? value.trim() : value);
+const optionalTrimmedString = z.preprocess(
+  (value) => {
+    const normalized = trimmed(value);
+    return normalized === '' ? undefined : normalized;
+  },
+  z.string().min(1).optional(),
+);
 const optionalUrl = z.preprocess(
   (value) => {
     const normalized = trimmed(value);
@@ -45,9 +52,42 @@ const envSchema = z
       trimmed,
       z.string().min(1).default('/app/storage/sop-pdf'),
     ),
+
+    AI_DRAFT_PROVIDER: z.preprocess(
+      (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
+      z.enum(['disabled', 'openai', 'fake']).default('disabled'),
+    ),
+    AI_DRAFT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+    OPENAI_API_KEY: optionalTrimmedString,
+    OPENAI_MODEL: optionalTrimmedString,
   })
   .superRefine((data, ctx) => {
+    if (data.AI_DRAFT_PROVIDER === 'openai') {
+      if (!data.OPENAI_API_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'OPENAI_API_KEY wajib ketika AI_DRAFT_PROVIDER=openai',
+          path: ['OPENAI_API_KEY'],
+        });
+      }
+      if (!data.OPENAI_MODEL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'OPENAI_MODEL wajib ketika AI_DRAFT_PROVIDER=openai',
+          path: ['OPENAI_MODEL'],
+        });
+      }
+    }
+
     if (data.NODE_ENV !== 'production') return;
+
+    if (data.AI_DRAFT_PROVIDER === 'fake') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'AI_DRAFT_PROVIDER=fake hanya diizinkan untuk test/development',
+        path: ['AI_DRAFT_PROVIDER'],
+      });
+    }
 
     const allowedOrigins = data.ALLOWED_ORIGINS.trim().toLowerCase();
     if (allowedOrigins === '*' || allowedOrigins === 'all') {

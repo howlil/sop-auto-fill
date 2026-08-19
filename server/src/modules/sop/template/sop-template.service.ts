@@ -2,6 +2,8 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import type { JwtAccessPayload } from '../../../common';
 import { Prisma } from '../../../generated/prisma';
 import { WorkspaceService } from '../../workspace/workspace.service';
+import { SopDraftInstantiationService } from '../draft/sop-draft-instantiation.service';
+import type { SopDraftDefinition } from '../draft/sop-draft.types';
 import type { CreateSopFromTemplateDto } from './dto/create-sop-from-template.dto';
 import { normalizeActorName, summarizeTemplate, validateTemplate } from './sop-template.mapper';
 import { SopTemplateRepository } from './sop-template.repository';
@@ -9,6 +11,7 @@ import type {
   SopTemplateCreateIdentity,
   SopTemplatePreview,
   SopTemplateSummary,
+  ValidatedTemplate,
 } from './sop-template.types';
 
 @Injectable()
@@ -16,6 +19,7 @@ export class SopTemplateService {
   constructor(
     private readonly repository: SopTemplateRepository,
     private readonly workspaceService: WorkspaceService,
+    private readonly draftInstantiation: SopDraftInstantiationService,
   ) {}
 
   async list(): Promise<SopTemplateSummary[]> {
@@ -72,8 +76,8 @@ export class SopTemplateService {
     await this.workspaceService.assertOwner(user.sub, dto.workspaceId);
     const template = await this.getTemplate(templateId);
     try {
-      return await this.repository.instantiateTemplate({
-        template,
+      return await this.draftInstantiation.instantiate({
+        definition: this.toDraftDefinition(template),
         workspaceId: dto.workspaceId,
         userId: user.sub,
         judul: dto.judul.trim(),
@@ -86,6 +90,17 @@ export class SopTemplateService {
       }
       throw error;
     }
+  }
+
+  private toDraftDefinition(template: ValidatedTemplate): SopDraftDefinition {
+    return {
+      peringatan: template.peringatan,
+      kualifikasiPelaksanaan: template.kualifikasiPelaksanaan,
+      peralatanPerlengkapan: template.peralatanPerlengkapan,
+      pencatatanPendataan: template.pencatatanPendataan,
+      actorNames: template.actorNames,
+      steps: template.steps,
+    };
   }
 
   private async getTemplate(templateId: string) {
