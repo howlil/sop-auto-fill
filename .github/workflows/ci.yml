@@ -76,6 +76,7 @@ jobs:
     env:
       NODE_ENV: test
       E2E_TEST: "1"
+      AI_DRAFT_PROVIDER: fake
       PORT: "3001"
       DATABASE_HOST: 127.0.0.1
       DATABASE_PORT: "3306"
@@ -163,6 +164,8 @@ jobs:
           MYSQL_USER=sop
           MYSQL_PASSWORD=sop-ci-password
           MYSQL_ROOT_PASSWORD=root-ci-password
+          AI_DRAFT_PROVIDER=disabled
+          AI_DRAFT_TIMEOUT_MS=30000
           SWAGGER_ENABLED=false
           BACKUP_DIR=./backups-ci
           BACKUP_RETENTION_DAYS=14
