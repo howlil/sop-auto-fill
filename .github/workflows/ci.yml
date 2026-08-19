@@ -135,6 +135,8 @@ jobs:
         run: |
           command -v google-chrome
           google-chrome --version
+      - name: Install Playwright video helper
+        run: pnpm --dir client exec playwright install ffmpeg
       - name: Run MVP vertical slice
         run: pnpm --dir client test:e2e
       - name: Upload E2E failure artifacts
