@@ -2,7 +2,7 @@ import { UnprocessableEntityException } from '@nestjs/common';
 import { JenisLangkahProsedur, SatuanWaktu } from '../../../generated/prisma';
 import { parseAndCanonicalizeAiDraft } from './sop-ai-draft.schema';
 
-function validOutput() {
+function validOutput(): any {
   return {
     suggestedTitle: ' SOP Verifikasi Permohonan ',
     peringatan: [' Pastikan dokumen lengkap ', '   '],
@@ -53,7 +53,7 @@ function validOutput() {
   };
 }
 
-function expectInvalid(mutator: (value: ReturnType<typeof validOutput>) => void) {
+function expectInvalid(mutator: (value: any) => void) {
   const value = validOutput();
   mutator(value);
   expect(() => parseAndCanonicalizeAiDraft(value)).toThrow(UnprocessableEntityException);
@@ -137,10 +137,10 @@ describe('parseAndCanonicalizeAiDraft', () => {
 
   it('menolak enum provider yang tidak dikenal', () => {
     expectInvalid((value) => {
-      value.steps[0].jenis = 'UNKNOWN' as JenisLangkahProsedur;
+      value.steps[0].jenis = 'UNKNOWN';
     });
     expectInvalid((value) => {
-      value.steps[0].satuanWaktu = 'minute' as SatuanWaktu;
+      value.steps[0].satuanWaktu = 'minute';
     });
   });
 
