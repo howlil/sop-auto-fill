@@ -1,66 +1,60 @@
 # Current Iteration
 
-- **Iteration:** `2-production-hardening`
-- **Status:** `COMPLETE`
-- **Working branch:** `feat/production-hardening` (merged via PR #4)
-- **Integration:** squash-merged to `master` as `ebf8855c45d8e2446a580ef8b93645aea85fbb82`
-- **Post-merge verification:** GitHub Actions run `#189` / `31710518699` — server, client, E2E, dan production-compose `success`
-- **Goal:** membuat aplikasi dapat dideploy dan dipulihkan secara pragmatis di MyPaaS menggunakan Docker Compose biasa, persistent MySQL/PDF storage, Prisma migrations, backup/restore, health verification, dan dokumentasi operasi tanpa registry atau CD otomatis.
+- **Iteration:** `3-smart-template-auto-fill`
+- **Status:** `REVIEW_READY`
+- **Working branch:** `feat/smart-template-auto-fill`
+- **Pull request:** `#5`
+- **Goal:** menambahkan jalur pembuatan SOP berbasis system template dan reusable workspace data tanpa mengganti editor, autosave, Flowchart/BPMN, versioning, print, atau PDF yang sudah stabil.
+- **Design spec:** `.agents/plans/2026-08-18-smart-template-auto-fill-design.md`
+- **Implementation plan:** `.agents/plans/2026-08-19-smart-template-auto-fill-implementation.md`
 
 ## User-Approved Direction
 
-User secara eksplisit menyetujui transition dan merge Iteration 2 dengan keputusan berikut:
+User secara eksplisit meminta Iteration 3 dilanjutkan ke implementasi dengan arah berikut:
 
-- target MyPaaS;
-- Docker Compose biasa dari source repository;
-- tiga service utama: `frontend`, `backend`, `mysql`;
-- MySQL berada di Compose yang sama;
-- tidak memakai GHCR/package registry;
-- deployment manual `git pull` + Compose;
-- backup database harian ke host filesystem dengan retention 14 hari;
-- arsitektur production-hardened ringan, bukan ops stack kompleks.
+- `Buat SOP` mempertahankan opsi SOP kosong;
+- jalur baru `Dari Template` menghasilkan SOP `DRAFT` biasa;
+- template digunakan sebagai starting point dan seluruh hasil tetap editable;
+- reusable workspace data, terutama pelaksana/swimlane, digunakan kembali secara deterministik;
+- auto-fill tidak boleh diam-diam menempelkan peraturan yang mungkin tidak relevan;
+- existing editor menjadi satu-satunya editor setelah draft dibuat;
+- AI/LLM assistance ditunda ke iteration terpisah setelah deterministic auto-fill terbukti;
+- approval/evaluation/TTE/public archive/WhatsApp tidak dikembalikan ke scope produk ini.
 
-Design spec: `.agents/plans/2026-08-13-production-hardening-design.md`.
-Implementation plan: `.agents/plans/2026-08-13-production-hardening-implementation.md`.
-Production runbook: `docs/production-deployment.md`.
+## Implemented Behavior
 
-## TDD / Regression Evidence
+Iteration 3 sekarang menyediakan:
 
-1. Run #154 RED: production contract gagal karena `compose.yml missing` sebelum Compose diimplementasikan.
-2. Run #161 RED: `prisma migrate deploy` tidak menemukan migration dan MVP E2E gagal karena tabel `User` belum ada.
-3. Run #164 GREEN: baseline migration diterapkan, rerun migration idempotent, MVP E2E kembali hijau.
-4. Run #165 RED: production contract gagal karena operator scripts belum tersedia/executable.
-5. Run #174 RED: production contract menangkap CSP yang belum mengizinkan Google Identity Services.
-6. Run #176 menemukan runtime SSR blocker: production frontend kehilangan `@tanstack/router-zod-adapter` karena dependency diexternalize dari SSR bundle.
-7. Run #177 GREEN: SSR dependency dibundle; public readiness, DB/PDF persistence, backup retention, dan restore lulus.
-8. Run #180 RED review gate: operator scripts masih men-source Compose env file di host.
-9. Run #187 GREEN: host secret sourcing dihapus, restore mengganti database state secara penuh, dan seluruh mandatory jobs kembali lulus.
-10. Run #188 GREEN: final PR head `8c405bf6e2fdbca4b6e18f45aa442aaea2f42da6` lulus seluruh mandatory jobs sebelum merge.
-11. Run #189 GREEN: squash merge commit `ebf8855c45d8e2446a580ef8b93645aea85fbb82` lulus ulang seluruh mandatory jobs di `master`.
+1. dua model persisted read-only system template: `SopTemplate` dan `SopTemplateStep`;
+2. migration additive production untuk kedua model tersebut;
+3. tiga system template stabil: `administrasi-umum`, `pengelolaan-dokumen`, dan `pelayanan`;
+4. API authenticated untuk list template, preview workspace actor reuse/create, dan transactional create-from-template;
+5. deterministic actor matching berdasarkan normalized actor name, reuse actor existing, dan create actor missing tepat satu kali;
+6. pembuatan `SOP` + `DetailSOP` + swimlane + lampiran + langkah + decision routing dalam satu Prisma transaction;
+7. UI `Buat SOP` dengan jalur `SOP Kosong` dan `Dari Template`, preview sebelum mutation, lalu navigasi ke editor existing;
+8. production-safe idempotent template seed yang dijalankan setelah `prisma migrate deploy`;
+9. normalisasi default `keterangan` template agar draft hasil template langsung memenuhi kontrak validasi editor existing;
+10. acceptance coverage yang mempertahankan blank-SOP journey dan menambahkan full template-SOP lifecycle.
 
-## Verified Production Behavior
+Tidak ada automatic attachment `Peraturan`, template mutation endpoint, template designer, AI/LLM drafting, approval/evaluation/TTE/public archive, atau WhatsApp yang ditambahkan pada Iteration 3.
 
-Post-merge run #189 membuktikan pada disposable production Compose environment:
+## Verification Evidence
 
-- image frontend/backend dapat dibuild langsung dari source repository;
-- MySQL 8.4 production service menjadi healthy;
-- baseline Prisma migration dapat diterapkan pada fresh DB dan `migrate deploy` kedua aman/idempotent;
-- MySQL named volume bertahan setelah container dihapus dan dibuat ulang;
-- frontend + backend production container healthy dan `/api/health/ready` dapat diakses melalui public frontend ingress;
-- SOP PDF named volume bertahan setelah backend container dihapus dan dibuat ulang;
-- `backup.sh` menghasilkan `.sql.gz` valid dan retention menghapus backup >14 hari;
-- `restore.sh` mengganti database state kembali ke snapshot backup;
-- server typecheck/tests/build, client typecheck/tests/build, dan MVP Playwright E2E tetap hijau.
+Code-bearing head `4027cc02bc5be8561ae72bfba94257d80a01b13c` diverifikasi oleh GitHub Actions CI run `#212` / `32282912958` dengan seluruh mandatory jobs hijau:
 
-## Review Findings Resolved
+- **server:** Prisma generate, typecheck, Jest, dan build lulus;
+- **client:** typecheck, 278 unit tests, dan production build lulus;
+- **E2E:** migration deploy dua kali, seed dua kali, lalu 2 Playwright journeys lulus:
+  - blank workspace SOP lifecycle tetap lulus;
+  - system-template SOP lifecycle lulus dari preview/create sampai autosave, reload, Flowchart/BPMN, Complete, dan Create New Version;
+- **production-compose:** production contract, image builds, migration dua kali, template seed dua kali dengan exact state `3 SopTemplate / 15 SopTemplateStep`, MySQL persistence, readiness, PDF persistence, backup retention, dan full restore lulus.
 
-- Google Identity Services production CSP diizinkan secara targeted; CSP tidak dinonaktifkan.
-- TanStack route Zod adapter dibundle ke SSR output agar runtime image tetap memakai production dependencies saja.
-- Production scripts tidak `source` `.env.production`; database credentials digunakan dari container environment yang sudah diparse Docker Compose.
-- Restore menggunakan root credential hanya di dalam MySQL container untuk drop/recreate DB sebelum import.
-- MySQL dan backend tidak dipublish ke host; hanya frontend ingress yang diekspos.
-- Deploy menolak tracked maupun untracked repository changes yang tidak di-ignore sebelum `git pull --ff-only`.
+Run `#212` juga membuktikan defect acceptance terakhir telah ditutup: template seed kini menghasilkan `keterangan` non-empty untuk langkah yang sebelumnya kosong sehingga `Selesai edit` dapat melewati validasi editor existing dan masuk ke diagram lifecycle normal.
 
-## Transition State
+## Review Gate
 
-Iteration 2 selesai dan sudah terintegrasi ke `master`. Jangan memulai Iteration 3 atau memperluas scope produk hanya dari file ini; transition berikutnya harus berasal dari instruksi/approval user yang eksplisit.
+Implementation selesai dan siap explicit review. Karena Iteration 3 menambahkan migration produksi, final merge tetap kategori high-risk sesuai `AGENTS.md` dan **tidak boleh dilakukan hanya karena CI hijau**. Merge PR #5 membutuhkan approval user eksplisit setelah review.
+
+## Transition Rule
+
+Jangan memulai Iteration 4 atau AI-assisted drafting dari file ini. Iteration berikutnya hanya dimulai setelah Iteration 3 selesai/merged dan ada instruksi atau approval user eksplisit.

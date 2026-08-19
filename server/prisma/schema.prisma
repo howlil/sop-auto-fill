@@ -372,3 +372,43 @@ model OverrideLabelDiagramSOP {
 
   @@id([detailSopId, jenis, kunciLabel])
 }
+
+/// Read-only system template used as a deterministic starting point for new SOP drafts.
+model SopTemplate {
+  templateId String @id @default(uuid()) @db.Char(36)
+  key String @unique @db.VarChar(120)
+  name String @db.VarChar(255)
+  description String @db.VarChar(500)
+  version Int
+  isActive Boolean @default(true)
+  peringatan Json
+  kualifikasiPelaksanaan Json
+  peralatanPerlengkapan Json
+  pencatatanPendataan Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  steps SopTemplateStep[]
+}
+
+/// Ordered procedure step owned by a system template. Decision targets refer to template step order.
+model SopTemplateStep {
+  templateStepId String @id @default(uuid()) @db.Char(36)
+  templateId String @db.Char(36)
+  urutan Int
+  kegiatan String @db.VarChar(500)
+  jenis JenisLangkahProsedur @default(KEGIATAN)
+  kelengkapan String @db.VarChar(500)
+  keluaran String @db.VarChar(500)
+  waktu Int
+  satuanWaktu SatuanWaktu
+  keterangan String @db.VarChar(500)
+  actorName String @db.VarChar(255)
+  targetYaUrutan Int?
+  targetTidakUrutan Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  template SopTemplate @relation(fields: [templateId], references: [templateId], onDelete: Cascade)
+
+  @@unique([templateId, urutan])
+  @@index([templateId])
+}
