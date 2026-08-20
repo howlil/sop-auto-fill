@@ -58,8 +58,10 @@ export function applyAiRevisionToEditor(
     }
   }
 
-  const rowIndex = state.prosedurRows.findIndex((row) => row.urutan === target.stepOrder)
-  if (rowIndex < 0) return { ok: false, reason: 'TARGET_NOT_FOUND' }
+  const rowIndex = target.stepOrder - 1
+  if (rowIndex < 0 || rowIndex >= state.prosedurRows.length) {
+    return { ok: false, reason: 'TARGET_NOT_FOUND' }
+  }
   const row = state.prosedurRows[rowIndex]
 
   let current = ''
