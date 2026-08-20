@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthModule } from '../../core/auth/auth.module';
+import { SopAiSnapshotRepository } from '../ai-common/sop-ai-snapshot.repository';
 import { AI_REVIEW_PROVIDER } from './providers/ai-review-provider';
 import { DisabledAiReviewProvider } from './providers/disabled-ai-review.provider';
 import { FakeAiReviewProvider } from './providers/fake-ai-review.provider';
 import { OpenAiReviewProvider } from './providers/openai-ai-review.provider';
 import { SopAiReviewController } from './sop-ai-review.controller';
-import { SopAiReviewRepository } from './sop-ai-review.repository';
 import { SopAiReviewService } from './sop-ai-review.service';
 
 @Module({
   imports: [AuthModule],
   controllers: [SopAiReviewController],
   providers: [
-    SopAiReviewRepository,
+    SopAiSnapshotRepository,
     SopAiReviewService,
     DisabledAiReviewProvider,
     FakeAiReviewProvider,
