@@ -6,113 +6,99 @@
 **Status:** DESIGN SPEC REVIEW  
 **Base:** Iteration 5 merge commit `8881d1888599ff1413fd6a454d2a1ba1ca844811`
 
-## 1. Context
+## 1. Context and Goal
 
-Iteration 3 introduced system templates, Iteration 4 added AI-assisted draft generation, and Iteration 5 added server-authoritative AI quality review for persisted SOP `DRAFT` snapshots. The product now helps a user start a SOP and identify quality findings, but remediation is still entirely manual.
+Iteration 3 introduced templates, Iteration 4 added AI-assisted draft generation, and Iteration 5 added server-authoritative AI quality review for persisted SOP `DRAFT` snapshots. Iteration 6 adds the next bounded authoring capability: turn a selected review finding into one textual revision proposal that the user can inspect and explicitly apply.
 
-Iteration 6 adds a narrow assistance layer between a quality finding and the existing editor: the user may request one bounded textual revision suggestion, inspect a before/after preview, and explicitly apply it into the existing client editor state. The AI provider never receives a direct application write path and never changes the database itself.
-
-The feature remains inside the repository's authoring scope. It does not restore evaluation, approval, TTE, public archive, collaboration, or other legacy workflow domains.
-
-## 2. Product Goal
-
-Provide a safe, user-controlled way to turn selected AI Review findings into one textual improvement proposal while preserving the existing SOP lifecycle, autosave behavior, diagrams, immutable completed versions, and server-side trust boundary.
+The feature remains inside the existing SOP-authoring scope. It does not restore approval/evaluation/TTE/public archive workflows and does not introduce collaboration, regulation retrieval, or compliance certification.
 
 Primary flow:
 
 ```text
 SOP DRAFT
-  -> Periksa dengan AI
-  -> pilih finding yang revision-eligible
+  -> AI Review
+  -> select revision-eligible finding
   -> Sarankan Perbaikan
+  -> autosave must succeed
   -> server loads authoritative persisted snapshot
-  -> AI returns one constrained textual proposal
-  -> server validates target + before/after
+  -> AI returns one constrained proposal
+  -> server validates target and proposed text
   -> before/after preview
-  -> user chooses Batal or Terapkan
-  -> Terapkan updates existing editor state only
-  -> existing autosave persists the change
-  -> previous review/revision becomes stale and is cleared
+  -> Batal or Terapkan
+  -> Terapkan updates existing client editor state only
+  -> existing autosave persists change
+  -> old review/revision state becomes stale and clears
   -> user may run AI Review again
 ```
 
-## 3. Design Principles
+## 2. Core Invariants
 
-1. **No silent mutation.** AI suggestions are never applied without an explicit user action.
-2. **No AI database write path.** The revision endpoint is suggestion-only. Persistence remains the responsibility of existing editor autosave endpoints.
-3. **Persisted source of truth.** The server loads the current persisted `DRAFT` snapshot after client autosave succeeds.
-4. **Small mutation surface.** Iteration 6 edits only a defined subset of existing textual fields.
-5. **No structural rewrite.** AI cannot add/remove/reorder steps, alter actors, alter decision routing, alter timing, or change lifecycle state.
-6. **Provider output is untrusted.** Every target and proposed value is application-validated against the same snapshot.
-7. **Stale suggestions are discarded.** A proposal cannot be applied after the relevant editor content has changed.
-8. **Advisory, not authoritative.** A suggested revision is not a compliance result, approval, legal opinion, or official SOP decision.
+1. AI never silently mutates a SOP.
+2. There is no AI revision application/write endpoint.
+3. The suggestion endpoint performs no application create/update/delete.
+4. Persistence remains exclusively through existing editor autosave behavior.
+5. The server loads the persisted `DRAFT` snapshot after client autosave succeeds.
+6. Browser-supplied finding data and provider output are both untrusted.
+7. One request produces at most one allowed textual edit.
+8. Structural, identity, routing, timing, lifecycle, and actor changes are prohibited.
+9. A stale suggestion cannot be applied.
+10. A revision is advisory, not approval, compliance certification, or legal guidance.
 
-## 4. Explicit Scope
+## 3. Allowed Revision Surface
 
-### 4.1 Allowed textual targets
-
-Iteration 6 may propose changes only to:
+Iteration 6 can change exactly one of these existing textual values per accepted proposal:
 
 - SOP title;
 - one existing `peringatan` item;
 - step `kegiatan`;
 - step `kelengkapan`;
-- step `keluaran` / output;
+- step `keluaran`;
 - step `keterangan`.
 
-The proposal changes exactly one target per request.
-
-### 4.2 Protected fields and structures
-
-AI revision must not modify:
+It cannot modify:
 
 - SOP number;
-- organization / institution identity;
-- version number;
-- SOP status;
-- actors / pelaksana or swimlane membership/order;
-- step count;
-- step order;
-- step type (`AWAL_AKHIR`, `KEGIATAN`, `KEPUTUSAN`);
+- organization/institution identity;
+- version or status;
+- actor/pelaksana/swimlane membership or order;
+- step count or order;
+- step type;
 - decision yes/no routing;
 - duration or time unit;
+- regulation/related-SOP relations;
 - qualification, equipment, or recordkeeping list structure;
-- related regulations or related SOPs;
-- completion state or version-cloning behavior.
+- completion or version-cloning state.
 
-### 4.3 Findings that remain manual
+No list item, actor, or step may be created/deleted by AI revision.
 
-Not every AI Review finding receives `Sarankan Perbaikan`.
+## 4. Findings that Remain Manual
 
-Findings about these areas remain manual in Iteration 6:
+`Sarankan Perbaikan` is not shown for findings whose safe fix requires protected or structural changes.
+
+The following categories remain manual in Iteration 6:
 
 - `PROCESS_STRUCTURE`;
 - `ACTOR_RESPONSIBILITY`;
 - `DECISION_ROUTING`;
-- `TIME_PLAUSIBILITY`;
-- actor-located findings;
-- findings whose only safe remediation would require adding/removing/reordering data;
-- findings whose target is outside the allowed textual set.
+- `TIME_PLAUSIBILITY`.
 
-The UI should explain that the finding requires manual editing rather than presenting a disabled promise of automatic repair.
+Actor-located findings and findings outside the allowed textual surface also remain manual. The UI should state that these findings must be edited manually rather than implying AI can repair them safely.
 
-## 5. Refinement from the Approved High-Level Design
+## 5. Browser Trust Refinement
 
-The initial high-level design described a request shaped as `detailSopId + finding + target field`.
+The approved high-level design initially described a request containing `detailSopId + finding + target field`.
 
-After inspecting Iteration 5, the safer contract is:
+The implementation contract is intentionally stricter:
 
 ```text
-detailSopId + validated finding
+detailSopId + finding
 ```
 
-The browser does **not** get authority to nominate an arbitrary target field. The provider proposes one target from a strict allowlist, and the application validates that target against the finding category/location and authoritative snapshot.
+The browser does not nominate an arbitrary field. The provider proposes one target from a strict schema and the server validates that target against a deterministic allowlist derived from the finding and authoritative snapshot.
 
-This removes a browser-controlled target from the trust boundary and reduces the chance of using the feature to rewrite protected fields.
+This refinement reduces browser authority and makes protected-field bypass harder.
 
-## 6. Revision Target Model
-
-The server-normalized proposal target is one of:
+## 6. Revision Target Contract
 
 ```ts
 type SopAiRevisionTarget =
@@ -125,31 +111,31 @@ type SopAiRevisionTarget =
     }
 ```
 
-No application database ID is present in this contract.
+Normative index semantics:
 
-`itemIndex` refers only to an already-existing warning item in the authoritative snapshot. Iteration 6 cannot create or delete warning items.
+- `itemIndex` is a **0-based** index into the authoritative persisted `peringatan` array and must refer to an existing item;
+- `stepOrder` is the existing **1-based** human-visible procedure order used by Iteration 5 findings;
+- no database ID appears in the provider/client revision contract.
 
-`stepOrder` refers to the human-visible 1-based procedure order, consistent with Iteration 5 finding navigation. Internal `langkahSopId` is not exposed to the provider or client revision contract.
+## 7. Finding-to-Target Allowlist
 
-## 7. Finding-to-Target Eligibility
+The server derives allowed targets conservatively.
 
-Eligibility is deliberately conservative.
+### HEADER
 
-### Header
+- `HEADER + CLARITY` -> `HEADER/JUDUL` only.
+- All other header findings remain manual because they may concern protected identity fields.
 
-- `HEADER + CLARITY` may target `JUDUL`.
-- Other header findings remain manual because they may refer to protected identity/number fields.
+### PERINGATAN
 
-### Peringatan
+For location `PERINGATAN`:
 
-- `PERINGATAN + CLARITY` may revise one existing warning item.
-- `PERINGATAN + SUPPORTING_FIELD` may revise one existing warning item.
-- `PERINGATAN + COMPLETENESS` may revise one existing warning item only when at least one item already exists.
-- If the safe fix requires adding/removing warning items, it remains manual.
+- `CLARITY`, `SUPPORTING_FIELD`, or `COMPLETENESS` may revise one already-existing warning item;
+- if the warning list is empty, or the correct fix requires adding/removing items, the finding remains manual.
 
-### Step
+### STEP
 
-For `STEP` findings:
+For a `STEP` location:
 
 - `CLARITY` -> `KEGIATAN` or `KETERANGAN`;
 - `INPUT_OUTPUT` -> `KELENGKAPAN` or `KELUARAN`;
@@ -157,9 +143,9 @@ For `STEP` findings:
 - `SUPPORTING_FIELD` -> `KETERANGAN`;
 - all other categories remain manual.
 
-The provider may choose among the allowed targets for that finding, but the application validator is authoritative and rejects any target outside the mapping.
+The provider can choose only among candidates derived by this allowlist. Application validation is authoritative.
 
-## 8. API Design
+## 8. API
 
 ### 8.1 Availability
 
@@ -167,29 +153,25 @@ The provider may choose among the allowed targets for that finding, but the appl
 GET /sop/ai-revisions/availability
 ```
 
-Response:
-
 ```json
 { "enabled": true }
 ```
 
-Availability is independent from AI Draft and AI Review. Production may enable or disable each feature separately.
+AI Draft, AI Review, and AI Revision remain independently configurable.
 
-### 8.2 Suggest Revision
+### 8.2 Suggest
 
 ```http
 POST /sop/:detailSopId/ai-revisions/suggest
 ```
 
-Request body:
+Request:
 
 ```ts
 interface SuggestAiRevisionRequest {
   finding: SopQualityFinding
 }
 ```
-
-The finding is browser-supplied and therefore untrusted. The server validates enum values, text lengths, and location shape before use.
 
 Response:
 
@@ -206,15 +188,15 @@ interface SuggestAiRevisionResponse {
 }
 ```
 
-There is intentionally no `POST /apply` endpoint.
+`before` is always read by application code from the authoritative snapshot after target canonicalization. The provider never gets authority to assert the source value.
 
-## 9. Server Architecture
+There is intentionally no `/apply` endpoint.
 
-### 9.1 Shared authoritative snapshot boundary
+## 9. Shared Authoritative Snapshot Boundary
 
-Iteration 5 already has a read-only repository that loads the authoritative SOP snapshot for AI Review. Iteration 6 needs the same ownership/status/snapshot shape.
+Iteration 5 already has a read-only repository dedicated to loading the authoritative SOP snapshot for AI Review. Iteration 6 needs the same ownership/status/content snapshot.
 
-Rather than duplicate that database query, Iteration 6 should perform a targeted extraction into a shared internal AI snapshot boundary, for example:
+To avoid two near-identical database queries drifting, Iteration 6 should perform a targeted internal extraction, for example:
 
 ```text
 server/src/modules/sop/ai-common/
@@ -222,13 +204,11 @@ server/src/modules/sop/ai-common/
   sop-ai-snapshot.types.ts
 ```
 
-Both AI Review and AI Revision consume this shared read-only snapshot repository.
+AI Review and AI Revision then consume the shared read-only snapshot boundary. The refactor must preserve Iteration 5 API/provider behavior and must not change Prisma schema or persistence semantics.
 
-This is a focused refactor serving the new feature. It must preserve Iteration 5 behavior exactly and must not alter Prisma schema or persistence semantics.
+## 10. Server Revision Module
 
-### 9.2 Revision module
-
-New bounded subsystem:
+Planned subsystem:
 
 ```text
 server/src/modules/sop/ai-revision/
@@ -245,66 +225,57 @@ server/src/modules/sop/ai-revision/
     openai-ai-revision.provider.ts
 ```
 
-### 9.3 Service trust sequence
+Service sequence is fixed:
 
-`SopAiRevisionService.suggest(...)` must execute in this order:
+1. provider mode must be enabled;
+2. request finding schema is validated;
+3. authoritative SOP context is loaded by `detailSopId`;
+4. missing SOP -> not found;
+5. JWT owner mismatch -> forbidden;
+6. non-`DRAFT` -> conflict;
+7. safe target candidates are derived from finding + snapshot;
+8. zero candidates -> reject without provider call;
+9. provider-safe context is built;
+10. provider is invoked;
+11. raw output is parsed as untrusted data;
+12. target is canonicalized against snapshot;
+13. target must belong to the server-derived candidate set;
+14. `before` is read from snapshot;
+15. `after` is validated against the same limits expected by existing editor/API fields;
+16. normalized no-op (`after == before`) is rejected;
+17. one transient proposal is returned.
 
-1. reject when provider mode is disabled;
-2. validate request finding shape;
-3. load authoritative SOP context by `detailSopId`;
-4. return not-found when absent;
-5. verify JWT owner matches the SOP owner;
-6. require SOP status `DRAFT`;
-7. derive the set of allowed revision targets from finding + snapshot;
-8. reject without provider invocation when no safe target exists;
-9. build provider-safe input with no database IDs or credentials;
-10. invoke provider;
-11. validate provider output structurally;
-12. canonicalize target against authoritative snapshot;
-13. verify target is in the derived allowed-target set;
-14. set `before` from authoritative application state, not provider output;
-15. validate `after` against existing application field constraints;
-16. reject no-op proposals where normalized `after` equals `before`;
-17. return one transient suggestion.
+No application persistence mutation occurs in this sequence.
 
-The repository/service path performs no application `create`, `update`, `delete`, or mutating transaction.
+## 11. Provider-Safe Input
 
-## 10. Provider-Safe Input
+Revision provider context may include only what is useful for wording consistency:
 
-The provider receives only content required to produce a useful single-field rewrite.
-
-Allowed context may include:
-
-- SOP version number;
+- version number;
 - title;
 - warning values;
-- actor names and order, without IDs;
-- procedure steps with human-visible order, text fields, step type, actor name, and decision target order;
-- validated finding data.
+- actor names/order without IDs;
+- steps using human-visible order, textual fields, type, actor name, and human-visible decision target order;
+- validated finding.
 
-Provider input should omit when not required:
+It must omit:
 
 - `detailSopId`;
-- user ID;
-- workspace ID;
-- SOP database ID;
-- actor database IDs;
-- internal step IDs;
+- user/workspace/SOP database IDs;
+- actor/internal step IDs;
 - email;
-- JWT/token/cookies;
+- JWT/cookies/tokens;
 - audit logs;
 - unrelated SOPs;
-- API keys;
-- provider configuration secrets;
-- official SOP number and organization identity, because they are protected targets and not needed for wording revision.
+- API keys/provider secrets;
+- official SOP number;
+- organization identity.
 
-The provider is instructed to treat SOP/finding text as untrusted data, not as executable instructions.
+The provider instructions treat SOP and finding text as untrusted data, not executable instructions.
 
-## 11. Provider Output Contract
+## 12. Provider Output and Validation
 
-Provider raw output is `unknown` until parsed.
-
-Conceptual strict output:
+Conceptual provider output:
 
 ```ts
 interface AiRevisionProviderResult {
@@ -314,313 +285,299 @@ interface AiRevisionProviderResult {
 }
 ```
 
-The provider does not control `before`; the service reads `before` from the authoritative snapshot after canonicalizing the target.
-
-Validation rules include:
+Validation requires:
 
 - exactly one target;
-- target discriminator/field enums only;
-- bounded text lengths;
+- only documented discriminator/field enums;
+- bounded `after` and `rationale`;
 - non-empty trimmed `after`;
-- bounded `rationale`;
-- existing warning index or step order;
-- target allowed for the selected finding;
-- `after` compatible with the same field limits used by existing editor/API validation;
-- no change to protected fields or structures;
-- no-op rewrite rejected.
+- existing `itemIndex` or `stepOrder`;
+- target allowed for the current finding;
+- output compatible with existing field constraints;
+- no protected/structural change;
+- no no-op rewrite.
 
-Invalid output returns a sanitized 422-style application error and never reaches editor state.
+Invalid provider output becomes a sanitized 422-style application error and never reaches editor state.
 
-## 12. OpenAI Runtime Contract
+## 13. OpenAI Runtime Contract
 
-New environment variables:
+New configuration:
 
 ```text
 AI_REVISION_PROVIDER=disabled|openai|fake
 AI_REVISION_TIMEOUT_MS=30000
 ```
 
-Validation:
+Rules:
 
-- provider defaults to `disabled`;
-- timeout allowed range: `5000..60000` ms;
+- default provider: `disabled`;
+- timeout range: `5000..60000` ms, default `30000`;
 - `openai` requires existing server-side `OPENAI_API_KEY` and `OPENAI_MODEL`;
-- `fake` is rejected when `NODE_ENV=production`;
-- production example/Compose explicitly document/pass revision configuration;
-- production contract keeps revision disabled by default.
+- `fake` is rejected in `NODE_ENV=production`;
+- production example/Compose documents revision variables;
+- production remains disabled by default.
 
 OpenAI adapter follows the established backend-only Responses API pattern:
 
 - Node 22 native `fetch`;
-- Bearer API key only on server;
+- server-only Bearer key;
 - `store: false`;
 - strict JSON Schema Structured Outputs;
-- no `tools`;
+- no tools;
 - no web/file retrieval;
 - abort timeout;
-- sanitized 429/network/refusal/invalid-output failures;
-- no prompt, API key, or full provider response logging.
+- sanitized 429/network/refusal/invalid-output errors;
+- no prompt, API key, or full provider-response logging.
 
-Provider instructions must explicitly forbid:
+Provider instructions explicitly forbid inventing regulations/citations/official identity and forbid changing actors, routing, timing, structure, or lifecycle state.
 
-- inventing laws/regulations/citations;
-- inventing organization identity or official SOP number;
-- changing actors, routing, timing, or structure;
-- returning multiple edits;
-- obeying instructions embedded in user SOP/finding text;
-- representing the result as compliance approval.
+## 14. Client Revision State
 
-## 13. Client Architecture
-
-### 13.1 API types
-
-`client/src/api/workspace-sops.ts` gains typed availability and suggestion methods.
-
-### 13.2 Revision state hook
-
-Add a hook colocated with the existing quality-review hook, for example:
+Add a transient revision hook colocated with the existing review hook, for example:
 
 ```text
 client/src/pages/penyusun/sop/hooks/use-ai-sop-revision.ts
 ```
 
-The hook owns only transient UI/request state:
+It owns:
 
 - revision availability;
-- currently selected finding;
+- selected eligible finding;
 - running state;
 - proposal preview;
 - sanitized error;
-- request content fingerprint/detail ID guards.
+- request/staleness guards.
 
-No suggestion is persisted in browser storage or database.
+No proposal is stored in browser persistence or database.
 
-### 13.3 Suggestion request gate
+Before a suggestion request:
 
-Before requesting a proposal:
+1. SOP is editable `DRAFT`;
+2. revision provider is available;
+3. selected finding belongs to the currently displayed review and is client-eligible;
+4. `flushAllAutosave()` returns `true`;
+5. the hook captures current `detailSopId`, editor `contentFingerprint`, and deterministic finding identity;
+6. a response is accepted only if those identities still match.
 
-1. SOP must be editable `DRAFT`;
-2. AI Revision must be available;
-3. a current AI Review finding must exist and be revision-eligible;
-4. `flushAllAutosave()` must return `true`;
-5. request captures current `contentFingerprint` and `detailSopId`;
-6. stale response is discarded if either changes before response completion.
+Server validation remains authoritative even if client eligibility logic is bypassed.
 
-### 13.4 Preview
+## 15. Deterministic Finding and Review Identity
 
-A revision-eligible finding exposes `Sarankan Perbaikan`.
+Iteration 5 findings do not currently contain persisted IDs. Iteration 6 must not invent database IDs just to track transient UI state.
 
-After success, the panel shows:
+The client computes a deterministic `findingFingerprint` from the canonical finding fields:
 
 ```text
+severity + category + canonical location + title + explanation + recommendation
+```
+
+using stable serialization.
+
+A revision request also captures the editor `contentFingerprint` associated with the currently accepted review. Together:
+
+```text
+(detailSopId, reviewContentFingerprint, findingFingerprint)
+```
+
+form the transient request identity.
+
+If editor content changes, the existing review clears. Any in-flight revision response whose captured identity no longer matches is discarded. No finding/review ID is persisted.
+
+## 16. Before/After Preview
+
+A revision-eligible finding shows `Sarankan Perbaikan`.
+
+Successful response renders:
+
+```text
+Target: Langkah 3 · Output
+
 Sebelum
-<authoritative before value>
+<server-authoritative value>
 
 Usulan
-<proposed after value>
+<AI proposed value>
 
 <short rationale>
 
 [Batal] [Terapkan]
 ```
 
-The user always sees the exact field target, such as `Langkah 3 · Output`, before applying.
+Manual-only findings retain their existing navigation behavior and indicate that they require manual correction.
 
-### 13.5 Apply behavior
+No `Fix all` action exists.
 
-`Terapkan` does not call a revision write endpoint.
+## 17. Apply Semantics
 
-The client:
+`Terapkan` never calls a revision write endpoint.
 
-1. verifies current editor `detailSopId` matches `sourceDetailSopId`;
-2. verifies current target value still equals response `before`;
-3. if mismatched, marks proposal stale and refuses apply;
-4. updates only the corresponding existing React editor state through existing metadata/procedure setters;
-5. clears the revision proposal;
-6. clears the previous AI Review because the content has changed;
-7. relies on the existing autosave mechanism to persist the edit;
-8. existing autosave conflict/error behavior remains authoritative.
+The client must:
 
-A successful apply is therefore equivalent to a user editing that one field manually, except the value came from an explicitly accepted preview.
+1. verify current `detailSopId == sourceDetailSopId`;
+2. resolve target from the current editor state;
+3. verify current target value still equals response `before`;
+4. if not equal, mark proposal stale and refuse apply;
+5. update exactly that existing React editor field using existing metadata/procedure setters;
+6. clear the revision proposal;
+7. clear the previous AI Review because content changed;
+8. let existing autosave persist the change;
+9. rely on existing autosave conflict/error handling as the final persistence guard.
 
-### 13.6 Cancel behavior
+This makes accepted AI revision equivalent to a user manually replacing one existing text value.
 
-`Batal` discards only the transient proposal. It must not change editor state or trigger persistence.
+`Batal` discards the transient proposal and performs zero editor mutation.
 
-## 14. Staleness and Concurrency
+## 18. Concurrency and Staleness
 
-Iteration 6 must preserve the stale-response protections learned in Iteration 5.
-
-A suggestion is invalid if any of these change after the request begins:
+A proposal becomes stale when any of these no longer match the request:
 
 - `detailSopId`;
 - editor `contentFingerprint`;
-- selected finding/review instance;
-- exact current target value relative to returned `before`.
+- `findingFingerprint` / current review identity;
+- target's exact current value versus server-returned `before`.
 
-The client discards stale network responses and refuses stale apply.
+The client discards stale network responses and blocks stale apply.
 
-Server-side source remains the persisted snapshot. Client-side apply additionally checks `before` equality to avoid overwriting a newer local edit.
+If another writer changes the database after suggestion generation, existing autosave/optimistic-locking behavior remains the final persistence concurrency boundary.
 
-Existing optimistic-locking/autosave behavior remains the final persistence concurrency guard.
+## 19. Error Contract
 
-## 15. Error Handling
-
-User-visible failures remain compact and non-sensitive.
-
-Expected categories:
+Expected sanitized behavior:
 
 - provider disabled -> revision unavailable;
 - SOP missing -> not found;
-- ownership mismatch -> forbidden;
-- completed/non-DRAFT -> conflict;
-- finding not revision-eligible -> safe validation message, no provider call;
+- owner mismatch -> forbidden;
+- non-DRAFT -> conflict;
+- ineligible finding -> safe validation error without provider call;
 - autosave failure -> request not sent;
-- provider timeout/rate limit/network failure -> retryable generic message;
-- refusal/invalid structured output -> regenerate suggestion message;
-- target invalid/stale/no-op -> safe 422-style message;
-- local content changed while request is running -> stale proposal discarded;
-- local target changed before apply -> apply blocked, regenerate required.
+- timeout/rate-limit/network -> retryable generic message;
+- provider refusal/invalid output -> regenerate suggestion message;
+- invalid target/index/order/no-op -> safe 422-style message;
+- content changed during request -> stale response discarded;
+- target changed before apply -> apply blocked and regenerate required.
 
-Provider raw bodies/errors must not be exposed to the browser.
+Raw upstream provider errors/bodies are never exposed to the browser.
 
-## 16. Security and Privacy
+## 20. Security and Privacy
 
 Security invariants:
 
-- JWT authentication applies to revision endpoints;
-- ownership is verified server-side before provider invocation;
-- only `DRAFT` SOP can request revision suggestions;
-- browser-supplied finding is untrusted and schema-validated;
-- browser cannot choose an arbitrary protected target;
-- provider cannot write application state;
-- provider sees no application DB IDs or credentials;
-- no tools/retrieval means prompt injection cannot initiate external actions;
-- provider output cannot modify lifecycle/identity/structure because the application allowlist rejects it;
-- `before` is derived from server state rather than provider claims;
-- no AI revision prompt/history/result persistence is introduced;
-- production `fake` provider remains forbidden.
+- authenticated endpoint;
+- server-side owner check before provider invocation;
+- only `DRAFT` can request revision;
+- finding is schema-validated untrusted browser data;
+- browser cannot choose arbitrary target;
+- provider has no application write capability;
+- provider input has no DB IDs or credentials;
+- provider has no tools/retrieval;
+- provider output cannot escape the allowlist;
+- `before` is derived from application state;
+- no revision history/prompt/job persistence;
+- fake provider cannot run in production.
 
-## 17. No Database Migration
+## 21. No Database Migration
 
-Iteration 6 introduces no Prisma model/table/column/index migration.
+Iteration 6 adds no Prisma model/table/column/index.
 
 There is no persisted:
 
-- AI revision request;
-- AI revision result;
+- revision request;
+- revision result;
 - AI conversation;
-- review-to-revision linkage;
-- background job;
-- provider response history.
+- review-to-revision link;
+- provider response history;
+- background job.
 
-Existing SOP edit/audit behavior triggered by normal autosave remains unchanged.
+Normal SOP edit/audit behavior caused by existing autosave remains unchanged.
 
-## 18. UI Integration
+## 22. UI Integration
 
-The existing `AI Review` side-panel experience is extended rather than adding a new top-level editor mode.
+The current `AI Review` side panel is extended instead of adding a new top-level editor mode.
 
-Finding card behavior:
+Finding states:
 
-- manual-only finding: existing navigation plus a small explanation that the finding must be edited manually;
-- revision-eligible finding: existing navigation plus `Sarankan Perbaikan`;
-- suggestion in progress: only that finding shows loading state and duplicate requests are blocked;
-- suggestion ready: before/after preview appears in the AI Review panel context;
-- after `Terapkan`: editor moves/focuses to the affected target when practical, review/proposal clears, normal autosave status communicates persistence.
+- manual-only -> normal navigation + manual-edit explanation;
+- eligible -> normal navigation + `Sarankan Perbaikan`;
+- requesting -> finding-local loading state, duplicate request blocked;
+- proposal ready -> target + before/after + rationale + `Batal`/`Terapkan`;
+- after apply -> proposal/review clear and editor focuses affected field when practical.
 
-No bulk `Fix all` is included.
+Completed/read-only SOP never exposes revision action. A newly cloned DRAFT version may use review/revision again.
 
-## 19. Testing Strategy
+## 23. Testing Strategy
 
-TDD is required for each behavior slice.
+TDD is required.
 
-### Server unit tests
+Server tests cover:
 
-Cover:
-
-- revision target/output schema;
-- request finding validation;
-- shared snapshot extraction regression for AI Review;
-- disabled provider behavior;
-- not-found/ownership/DRAFT gate order;
+- shared authoritative snapshot extraction without AI Review regression;
+- request finding schema;
+- target/output schema;
+- disabled/not-found/owner/DRAFT gate order;
 - ineligible finding rejects before provider invocation;
-- provider-safe input strips IDs/secrets/protected identity data;
-- target allowlist by finding category/location;
-- authoritative `before` derivation;
-- invalid index/step/field rejection;
+- provider-safe input strips IDs/secrets/protected identity;
+- allowlist mapping;
+- authoritative `before`;
+- invalid warning index/step order/field;
 - no-op rejection;
-- provider timeout/rate-limit/refusal/invalid output sanitization;
-- runtime env validation and production fake rejection.
+- OpenAI timeout/rate-limit/refusal/invalid-output sanitization;
+- env validation and production fake rejection.
 
-### Client unit/component tests
-
-Cover:
+Client tests cover:
 
 - availability;
-- revision CTA only for eligible findings;
-- autosave must succeed before request;
+- CTA only for eligible findings;
+- autosave gate;
+- deterministic finding identity;
 - before/after preview;
 - cancel leaves editor unchanged;
-- apply mutates exactly one allowed editor field;
+- apply changes exactly one allowed field;
 - apply clears review/revision;
-- apply does not directly call a revision persistence endpoint;
-- target mismatch blocks stale apply;
-- content edit during request discards stale response;
-- read-only/completed editor exposes no revision action;
-- protected fields cannot be targeted through client contract.
+- apply uses no revision persistence endpoint;
+- stale network response discard;
+- stale `before` apply block;
+- read-only/completed state;
+- protected targets impossible through client contract.
 
-### Regression tests
+## 24. E2E Acceptance
 
-Existing AI Review behavior must remain green after shared snapshot extraction.
-
-Existing blank/template/AI-draft lifecycle tests remain unchanged except for test-harness changes strictly required by the new journey.
-
-## 20. E2E Acceptance Journey
-
-Add one deterministic fake-provider journey:
+New fake-provider journey:
 
 ```text
-create/open normal DRAFT
-  -> edit content
-  -> wait autosave
+create/open DRAFT
+  -> edit + autosave
   -> AI Review
-  -> receive revision-eligible finding
+  -> receive eligible finding
   -> Sarankan Perbaikan
-  -> verify before/after preview
-  -> Batal
-  -> verify field unchanged
-  -> request suggestion again
+  -> verify target + before/after
+  -> Batal and verify unchanged
+  -> request again
   -> Terapkan
   -> wait existing autosave success
   -> verify old review cleared
-  -> reload page
-  -> verify revised text persisted
+  -> reload and verify revised text persisted
   -> AI Review again
+  -> Flowchart/BPMN still render
   -> complete SOP
-  -> verify AI Review/Revision actions hidden in completed state
+  -> review/revision actions hidden
   -> create version 2
-  -> verify DRAFT remains editable/reviewable
+  -> new DRAFT remains editable/reviewable
 ```
 
-Additional acceptance assertions:
+Acceptance also proves a decision-routing finding remains manual and protected fields cannot be revised.
 
-- fake revision provider is enabled only in E2E/test environment;
-- no AI `apply` network endpoint exists;
-- decision-routing finding remains manual;
-- proposal cannot alter SOP number, organization identity, actor, time, or routing;
-- Flowchart and BPMN still render after the text revision;
-- all existing E2E journeys remain green.
+Existing blank/template/AI-draft/AI-review lifecycle journeys must remain green.
 
-## 21. CI and Production Contract
+## 25. CI and Production Contract
 
 Mandatory CI remains:
 
 1. server typecheck/tests/build;
 2. client typecheck/tests/build;
-3. Playwright E2E against disposable MySQL;
-4. production Compose/backup/restore contract.
+3. Playwright against disposable MySQL;
+4. production Compose/deploy/backup/restore contract.
 
-E2E job may set:
+E2E may enable:
 
 ```text
 AI_DRAFT_PROVIDER=fake
@@ -628,68 +585,67 @@ AI_REVIEW_PROVIDER=fake
 AI_REVISION_PROVIDER=fake
 ```
 
-Production contract must explicitly prove:
+Production must prove:
 
-- `AI_REVISION_PROVIDER` defaults to `disabled`;
-- fake revision provider is rejected in production;
-- no extra public service/port is introduced;
-- existing deployment, persistence, backup, and restore behavior is unchanged.
+- revision provider defaults disabled;
+- fake is rejected in production;
+- no new public service/port;
+- deployment/persistence/backup/restore contracts remain intact.
 
-## 22. Non-Goals
+## 26. Explicit Non-Goals
 
-Iteration 6 does not include:
+Iteration 6 excludes:
 
-- automatic fix without preview;
-- `Fix all` / bulk apply;
-- AI add/delete/reorder step;
-- AI actor/swimlane changes;
-- AI decision-routing changes;
-- AI timing changes;
-- AI SOP-number or organization-identity changes;
-- AI lifecycle completion;
-- persisted AI suggestion/history/chat;
+- automatic or silent fixes;
+- bulk `Fix all`;
+- add/delete/reorder steps;
+- actor/swimlane mutation;
+- decision-routing mutation;
+- timing mutation;
+- SOP-number/organization-identity mutation;
+- automatic completion;
+- persisted AI revision/history/chat;
 - background queue;
 - agents/tool calling;
-- RAG;
-- regulation lookup;
-- web/file search;
+- RAG/regulation lookup/web/file search;
 - compliance scoring/certification;
-- approval/evaluation/TTE/public archive workflow;
+- approval/evaluation/TTE/public archive;
 - collaboration/multi-owner;
 - model selector;
 - Prisma migration.
 
-## 23. Acceptance Criteria
+## 27. Completion Criteria
 
-Iteration 6 is implementation-complete only when all are true:
+Iteration 6 is implementation-complete only when:
 
-1. A current AI Review finding can request a single revision only when its category/location has a safe textual target.
-2. Suggestion request uses the authoritative persisted `DRAFT` snapshot after autosave succeeds.
-3. JWT owner and `DRAFT` gates occur before provider invocation.
-4. Provider input has no application DB IDs, credentials, audit logs, unrelated SOPs, SOP number, or organization identity.
-5. Provider output cannot target fields outside the application allowlist.
-6. Response `before` is derived from server state.
-7. User sees before/after preview and must explicitly choose `Terapkan`.
-8. `Batal` performs zero editor mutation.
-9. `Terapkan` changes exactly one allowed existing client editor field and uses existing autosave for persistence.
-10. No AI revision application write endpoint or persistence table exists.
-11. Stale response and stale apply are blocked.
-12. Completed SOP remains immutable with revision actions hidden.
-13. AI Review regression tests remain green after shared snapshot extraction.
-14. Blank, template, AI-draft, AI-review, and AI-revision E2E journeys all pass.
-15. Flowchart/BPMN/completion/version cloning remain intact.
-16. Production provider defaults disabled and fake is forbidden.
-17. No Prisma migration is introduced.
+1. only safe findings offer revision;
+2. autosave succeeds before suggestion request;
+3. server uses authoritative persisted DRAFT snapshot;
+4. authentication/ownership/DRAFT gates precede provider invocation;
+5. provider input contains no DB IDs, credentials, audit logs, unrelated SOPs, SOP number, or organization identity;
+6. provider can target only the server allowlist;
+7. response `before` is application-derived;
+8. user must inspect preview and explicitly apply;
+9. cancel causes zero mutation;
+10. apply changes exactly one allowed existing client field;
+11. persistence uses existing autosave only;
+12. no revision apply endpoint/table exists;
+13. stale response and stale apply are blocked;
+14. completed SOP remains immutable;
+15. AI Review remains regression-green after shared snapshot extraction;
+16. blank/template/AI-draft/AI-review/AI-revision E2E all pass;
+17. Flowchart/BPMN/completion/versioning remain intact;
+18. production defaults revision disabled and rejects fake;
+19. no Prisma migration exists.
 
-## 24. Rollout / Merge Gate
+## 28. Merge Gate
 
-Because Iteration 6 extends the external AI provider surface and adds user-approved mutation into editor state, final squash merge remains a high-risk integration gate.
-
-Requirements before merge:
+Iteration 6 extends the external AI provider surface and introduces explicit user-approved application of AI text into editor state. Final squash merge therefore requires:
 
 - mandatory CI green on final code-bearing head;
-- no unresolved review thread/blocker;
-- focused audit of provider-safe input and protected-target allowlist;
+- no unresolved review blocker;
+- focused audit of provider-safe input;
+- focused audit of protected-target allowlist;
 - focused audit confirming no direct AI persistence path;
 - explicit user final merge approval.
 
