@@ -20,7 +20,6 @@ async function installPdfPrintHarness(page: Page): Promise<void> {
     const testWindow = window as PdfEvidenceWindow
     const originalCreateObjectURL = URL.createObjectURL.bind(URL)
     const originalRevokeObjectURL = URL.revokeObjectURL.bind(URL)
-    const originalCreateElement = document.createElement.bind(document)
     const pdfSentinelUrl = 'about:blank#e2e-pdf'
 
     testWindow.__e2ePdfBlob = undefined
@@ -37,20 +36,6 @@ async function installPdfPrintHarness(page: Page): Promise<void> {
       if (url === pdfSentinelUrl) return
       originalRevokeObjectURL(url)
     }) as typeof URL.revokeObjectURL
-
-    document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
-      const element = originalCreateElement(tagName, options)
-      if (tagName.toLowerCase() === 'iframe' && element instanceof HTMLIFrameElement) {
-        element.addEventListener('load', () => {
-          const frameWindow = element.contentWindow
-          if (!frameWindow) return
-          frameWindow.print = () => {
-            window.dispatchEvent(new Event('afterprint'))
-          }
-        })
-      }
-      return element
-    }) as typeof document.createElement
   })
 }
 
@@ -164,8 +149,24 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await installPdfPrintHarness(page)
   await page.getByRole('button', { name: 'Cetak PDF' }).click()
   await expectPdfBlobGenerated(page)
+  await page.locator('iframe[src="about:blank#e2e-pdf"]').waitFor({
+    state: 'attached',
+    timeout: 10_000,
+  })
   await expect(page.getByText('Gagal menyiapkan PDF. Coba muat ulang halaman.')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Cetak PDF' })).toBeEnabled({ timeout: 10_000 })
+
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => {
+          window.dispatchEvent(new Event('afterprint'))
+        })
+        return page.getByRole('button', { name: 'Cetak PDF' }).count()
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1)
+  await expect(page.getByRole('button', { name: 'Cetak PDF' })).toBeEnabled()
 
   await page.getByRole('button', { name: 'Selesai' }).click()
   await page.getByRole('button', { name: 'Ya, selesai' }).click()
