@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, RefreshCcw } from 'lucide-react'
 import { DetailSOPPenyusunHeader } from './components/DetailSopPenyusunHeader'
 import { DetailSOPPenyusunMain } from './components/DetailSopPenyusunMain'
-import { DetailSOPPenyusunSidePanel } from './components/DetailSopPenyusunSidePanel'
+import {
+  DetailSOPPenyusunSidePanel,
+  type DetailSopSidePanelTabId,
+} from './components/DetailSopPenyusunSidePanel'
 import { Button } from '@/components/ui/button'
 import { showErrorMessages } from '@/hooks/useToast'
 import { useDetailSopPenyusun } from '@/api/sop'
 import { SopEditorProvider, type SopEditorContextValue } from './SopEditorContext'
+import { useAiSopQualityReview } from '@/pages/penyusun/sop/hooks/use-ai-sop-quality-review'
 import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-header-autosave'
+import type { SopQualityFinding } from '@/api/workspace-sops'
 
 const AUTOSAVE_RANK: Record<SopHeaderAutosaveStatus, number> = {
   idle: 0,
@@ -31,6 +36,7 @@ export function DetailSOPPenyusun() {
   const id = params.sopId ?? params.id ?? ''
   const [activeTab, setActiveTab] = useState<'flowchart' | 'bpmn'>('flowchart')
   const [isEditingSteps, setIsEditingSteps] = useState(false)
+  const [sidePanelTab, setSidePanelTab] = useState<DetailSopSidePanelTabId>('edit')
 
   const editor = useDetailSopPenyusun(id)
   const {
@@ -59,6 +65,7 @@ export function DetailSOPPenyusun() {
     prosedurAutosaveStatus,
     prosedurAutosaveError,
     flushProsedurAutosave,
+    flushAllAutosave,
     transitionToDone,
     retryAutosave,
     handleBuatVersiBaru,
@@ -68,12 +75,40 @@ export function DetailSOPPenyusun() {
 
   const combinedAutosaveStatus = combineAutosaveStatus(autosaveStatus, prosedurAutosaveStatus)
   const combinedAutosaveError = autosaveError ?? prosedurAutosaveError
+  const contentFingerprint = useMemo(
+    () => JSON.stringify({ metadata, implementers, prosedurRows }),
+    [metadata, implementers, prosedurRows],
+  )
+  const aiReview = useAiSopQualityReview({
+    detailSopId: sopDetailId,
+    isReadOnly,
+    flushAllAutosave,
+    contentFingerprint,
+  })
 
   useEffect(() => {
     if (combinedAutosaveError) {
       showErrorMessages(combinedAutosaveError, 'Gagal menyimpan perubahan otomatis')
     }
   }, [combinedAutosaveError])
+
+  const handleSelectAiFinding = useCallback((finding: SopQualityFinding) => {
+    if (finding.location.kind !== 'STEP') {
+      setSidePanelTab('edit')
+      return
+    }
+
+    const stepOrder = finding.location.stepOrder
+    setIsEditingSteps(true)
+    window.requestAnimationFrame(() => {
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(`[data-sop-step-order="${stepOrder}"]`),
+      )
+      const target = candidates.find((element) => element.getClientRects().length > 0) ?? candidates[0]
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.querySelector<HTMLElement>('input, textarea, button, [tabindex]')?.focus()
+    })
+  }, [])
 
   const contextValue = useMemo<SopEditorContextValue>(
     () => ({
@@ -181,6 +216,17 @@ export function DetailSOPPenyusun() {
               workspaceId={resolvedWorkspaceId}
               detailSopId={sopDetailId}
               sopId={sopId}
+              activeTab={sidePanelTab}
+              onActiveTabChange={setSidePanelTab}
+              aiReviewPanelProps={{
+                isAvailable: aiReview.isAvailable,
+                isAvailabilityLoading: aiReview.isAvailabilityLoading,
+                isRunning: aiReview.isRunning,
+                review: aiReview.review,
+                error: aiReview.error,
+                onRunReview: aiReview.runReview,
+                onSelectFinding: handleSelectAiFinding,
+              }}
               auditEntries={auditLogs}
               isReadOnly={isReadOnly}
               onBuatVersiBaru={() => void handleBuatVersiBaru()}

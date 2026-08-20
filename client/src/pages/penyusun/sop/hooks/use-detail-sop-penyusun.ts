@@ -49,10 +49,11 @@ export interface UseDetailSopPenyusunReturn {
   canBuatVersiBaru: boolean
   autosaveStatus: SopHeaderAutosaveStatus
   autosaveError: Error | null
-  flushHeaderAutosave: () => Promise<void>
+  flushHeaderAutosave: () => Promise<boolean>
   prosedurAutosaveStatus: SopProsedurAutosaveStatus
   prosedurAutosaveError: Error | null
-  flushProsedurAutosave: () => Promise<void>
+  flushProsedurAutosave: () => Promise<boolean>
+  flushAllAutosave: () => Promise<boolean>
   transitionToDone: () => Promise<void>
   retryAutosave: () => Promise<void>
   handleBuatVersiBaru: () => Promise<void>
@@ -63,10 +64,6 @@ export interface UseDetailSopPenyusunReturn {
   ) => void
 }
 
-/**
- * Adapter antara contract workspace SOP baru dan editor SOP existing.
- * State authoring tetap lokal + autosave; lifecycle hanya DRAFT/COMPLETED/ARCHIVED.
- */
 export function useDetailSopPenyusun(detailOrSopId: string): UseDetailSopPenyusunReturn {
   const { showToast } = useToast()
   const workbenchQuery = usePenyusunWorkbench(detailOrSopId || undefined)
@@ -170,19 +167,23 @@ export function useDetailSopPenyusun(detailOrSopId: string): UseDetailSopPenyusu
     [sopList, sopId],
   )
 
-  const flushAll = useCallback(async () => {
-    await Promise.all([headerAutosave.flush(), prosedurAutosave.flush()])
+  const flushAllAutosave = useCallback(async (): Promise<boolean> => {
+    const [headerSaved, prosedurSaved] = await Promise.all([
+      headerAutosave.flush(),
+      prosedurAutosave.flush(),
+    ])
+    return headerSaved && prosedurSaved
   }, [headerAutosave.flush, prosedurAutosave.flush])
 
   const transitionToDone = useCallback(async () => {
     if (!resolvedDetailId || currentSopStatus !== 'DRAFT') return
-    await flushAll()
+    await flushAllAutosave()
     await statusMutation.mutateAsync('COMPLETED')
-  }, [currentSopStatus, flushAll, resolvedDetailId, statusMutation])
+  }, [currentSopStatus, flushAllAutosave, resolvedDetailId, statusMutation])
 
   const retryAutosave = useCallback(async () => {
-    await flushAll()
-  }, [flushAll])
+    await flushAllAutosave()
+  }, [flushAllAutosave])
 
   const handleBuatVersiBaru = useCallback(async () => {
     if (!resolvedDetailId || !workspaceId || !canBuatVersiBaru) return
@@ -225,6 +226,7 @@ export function useDetailSopPenyusun(detailOrSopId: string): UseDetailSopPenyusu
     prosedurAutosaveStatus: prosedurAutosave.status,
     prosedurAutosaveError: prosedurAutosave.lastError,
     flushProsedurAutosave: prosedurAutosave.flush,
+    flushAllAutosave,
     transitionToDone,
     retryAutosave,
     handleBuatVersiBaru,

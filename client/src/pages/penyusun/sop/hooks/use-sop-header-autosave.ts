@@ -118,8 +118,8 @@ export interface UseSopHeaderAutosaveOptions {
 }
 
 export interface SopHeaderAutosaveControls {
-  /** Paksa kirim diff sekarang (tanpa menunggu debounce); aman dipanggil saat unmount/save manual. */
-  flush: () => Promise<void>
+  /** Paksa kirim diff sekarang. True berarti latest snapshot sudah tersimpan atau tidak ada diff. */
+  flush: () => Promise<boolean>
   /** Setel ulang baseline tanpa kirim PATCH (mis. setelah workbench dimuat ulang dari server). */
   resetBaseline: (next: SopHeaderSnapshot) => void
   /** Status autosave saat ini (untuk indikator UI). */
@@ -144,7 +144,7 @@ export function useSopHeaderAutosave(
   const latestSnapshotRef = useRef<SopHeaderSnapshot>(snapshot)
   const timerRef = useRef<number | null>(null)
   const savedTimerRef = useRef<number | null>(null)
-  const inFlightRef = useRef<Promise<void> | null>(null)
+  const inFlightRef = useRef<Promise<boolean> | null>(null)
   const saveRef = useRef(save)
   saveRef.current = save
 
@@ -166,10 +166,10 @@ export function useSopHeaderAutosave(
     }, SAVED_INDICATOR_MS)
   }, [clearSavedTimer])
 
-  const performSave = useCallback(async (): Promise<void> => {
-    if (!enabled || !detailSopId) return
+  const performSave = useCallback(async (): Promise<boolean> => {
+    if (!enabled || !detailSopId) return true
     const diff = diffSopHeaderSnapshots(latestSnapshotRef.current, baselineRef.current)
-    if (!hasAnyKey(diff)) return
+    if (!hasAnyKey(diff)) return true
     const targetSnapshot = latestSnapshotRef.current
     clearSavedTimer()
     setStatus('saving')
@@ -180,11 +180,13 @@ export function useSopHeaderAutosave(
         setLastError(null)
         setStatus('saved')
         scheduleSavedFlash()
+        return true
       })
       .catch((err: unknown) => {
         const error = err instanceof Error ? err : new Error(String(err))
         setLastError(error)
         setStatus('error')
+        return false
       })
       .finally(() => {
         if (inFlightRef.current === promise) {
@@ -192,7 +194,7 @@ export function useSopHeaderAutosave(
         }
       })
     inFlightRef.current = promise
-    await promise
+    return promise
   }, [clearSavedTimer, detailSopId, enabled, scheduleSavedFlash])
 
   const cancelTimer = useCallback(() => {
@@ -202,12 +204,13 @@ export function useSopHeaderAutosave(
     }
   }, [])
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<boolean> => {
     cancelTimer()
     if (inFlightRef.current) {
-      await inFlightRef.current
+      const inFlightSucceeded = await inFlightRef.current
+      if (!inFlightSucceeded) return false
     }
-    await performSave()
+    return performSave()
   }, [cancelTimer, performSave])
 
   const resetBaseline = useCallback(

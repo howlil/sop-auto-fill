@@ -101,6 +101,46 @@ export interface CreateSopFromTemplateInput {
   namaLembaga: string;
 }
 
+export type SopQualityFindingSeverity = "ERROR" | "WARNING" | "SUGGESTION";
+export type SopQualityReviewStatus = "PERLU_PERBAIKAN" | "CUKUP_BAIK" | "SIAP_DIREVIEW";
+export type SopQualityFindingCategory =
+  | "PROCESS_STRUCTURE"
+  | "ACTOR_RESPONSIBILITY"
+  | "INPUT_OUTPUT"
+  | "DECISION_ROUTING"
+  | "CLARITY"
+  | "SUPPORTING_FIELD"
+  | "TIME_PLAUSIBILITY"
+  | "COMPLETENESS";
+
+export type SopQualityFindingLocation =
+  | { kind: "HEADER" }
+  | { kind: "PERINGATAN" }
+  | { kind: "KUALIFIKASI_PELAKSANAAN" }
+  | { kind: "PERALATAN_PERLENGKAPAN" }
+  | { kind: "PENCATATAN_PENDATAAN" }
+  | { kind: "ACTOR"; actorName: string }
+  | { kind: "STEP"; stepOrder: number };
+
+export interface SopQualityFinding {
+  severity: SopQualityFindingSeverity;
+  category: SopQualityFindingCategory;
+  location: SopQualityFindingLocation;
+  title: string;
+  explanation: string;
+  recommendation: string;
+}
+
+export interface SopQualityReviewResponse {
+  reviewedDetailSopId: string;
+  reviewedVersion: number;
+  result: {
+    status: SopQualityReviewStatus;
+    summary: string;
+    findings: SopQualityFinding[];
+  };
+}
+
 export const workspaceSopApi = {
   list: (workspaceId: string) =>
     apiClient.get<ApiSuccessResponse<WorkspaceSopRow[]>>(
@@ -128,4 +168,10 @@ export const workspaceSopApi = {
     ),
   createFromAiDraft: (input: CreateSopFromAiDraftInput) =>
     apiClient.post<ApiSuccessResponse<SopTemplateCreateIdentity>>("/sop/ai-drafts/create", input),
+  aiReviewAvailability: () =>
+    apiClient.get<ApiSuccessResponse<{ enabled: boolean }>>("/sop/ai-reviews/availability"),
+  reviewAiSop: (detailSopId: string) =>
+    apiClient.post<ApiSuccessResponse<SopQualityReviewResponse>>(
+      `/sop/${encodeURIComponent(detailSopId)}/ai-review`,
+    ),
 };

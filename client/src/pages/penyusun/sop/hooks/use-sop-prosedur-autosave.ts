@@ -46,19 +46,12 @@ function normalizeSatuan(input: string | undefined): SatuanWaktu | undefined {
   return SATUAN_ALIASES[input]
 }
 
-/**
- * Ambil teks pertama yang setelah trim tidak kosong.
- * Dipakai untuk menggabungkan field UI (`mutu_kelengkapan`, `output`) dengan field kanonis API,
- * karena `''` bukan nullish — `??` saja tidak cukup.
- */
 export function pickNonEmptyTrimmed(
   ...candidates: (string | undefined | null)[]
 ): string | undefined {
   for (const c of candidates) {
     const t = (c ?? '').trim()
-    if (t.length > 0) {
-      return t
-    }
+    if (t.length > 0) return t
   }
   return undefined
 }
@@ -79,17 +72,11 @@ function parseMutuWaktuFallback(
   }
 }
 
-/** Snapshot stabil dari editor — input sumber kebenaran perubahan untuk diff & PATCH. */
 export interface SopProsedurSnapshot {
   pelaksana: PelaksanaPatchItem[]
   langkah: LangkahPatchItem[]
 }
 
-/**
- * Bangun snapshot dari state editor (`implementers` swimlane + `prosedurRows`).
- * `tempId` langkah memakai existing UUID langkahSopId; row baru memakai prefix `temp-*`
- * yang sudah dihasilkan oleh editor. Tidak mengubah ID di state UI.
- */
 export function buildSopProsedurSnapshot(
   implementers: SopEditorImplementer[],
   rows: ProsedurRow[],
@@ -106,8 +93,6 @@ export function buildSopProsedurSnapshot(
 }
 
 function mapRowToLangkah(row: ProsedurRow): LangkahPatchItem | null {
-  /* Baris benar-benar kosong tidak dikirim agar autosave tidak gagal validasi server.
-     Kriteria minimal: ada kegiatan ATAU pelaksana terisi. */
   const kegiatan = (row.kegiatan ?? '').trim()
   const pelaksanaId = resolveProsedurPelaksanaId(row)
   if (kegiatan.length === 0 && pelaksanaId.length === 0) return null
@@ -115,7 +100,6 @@ function mapRowToLangkah(row: ProsedurRow): LangkahPatchItem | null {
   const jenis: JenisLangkahProsedur = row.type
     ? (ROW_TYPE_TO_JENIS[row.type] ?? 'KEGIATAN')
     : 'KEGIATAN'
-
   const isKeputusan = jenis === 'KEPUTUSAN'
 
   const waktuRaw = row.waktu ?? row.time
@@ -180,20 +164,13 @@ function langkahListEqual(a: LangkahPatchItem[], b: LangkahPatchItem[]): boolean
   return true
 }
 
-/**
- * Diff snapshot prosedur. PATCH replace-all per section: hanya kirim section yang berubah.
- */
 export function diffSopProsedurSnapshots(
   current: SopProsedurSnapshot,
   baseline: SopProsedurSnapshot,
 ): UpdateSopProsedurDto {
   const dto: UpdateSopProsedurDto = {}
-  if (!pelaksanaListEqual(current.pelaksana, baseline.pelaksana)) {
-    dto.pelaksana = current.pelaksana
-  }
-  if (!langkahListEqual(current.langkah, baseline.langkah)) {
-    dto.langkah = current.langkah
-  }
+  if (!pelaksanaListEqual(current.pelaksana, baseline.pelaksana)) dto.pelaksana = current.pelaksana
+  if (!langkahListEqual(current.langkah, baseline.langkah)) dto.langkah = current.langkah
   return dto
 }
 
@@ -217,17 +194,13 @@ export interface UseSopProsedurAutosaveOptions {
 }
 
 export interface SopProsedurAutosaveControls {
-  flush: () => Promise<void>
+  /** True berarti latest snapshot sudah tersimpan atau tidak ada diff. */
+  flush: () => Promise<boolean>
   resetBaseline: (next: SopProsedurSnapshot) => void
   status: SopProsedurAutosaveStatus
   lastError: Error | null
 }
 
-/**
- * Autosave debounced untuk PATCH prosedur SOP (swimlane + langkah). Strategi sejajar
- * `useSopHeaderAutosave` — diff replace-all per section, debounce 800ms idle, flush
- * eksplisit untuk aksi besar (selesai/unmount/beforeunload).
- */
 export function useSopProsedurAutosave(
   options: UseSopProsedurAutosaveOptions,
 ): SopProsedurAutosaveControls {
@@ -242,7 +215,7 @@ export function useSopProsedurAutosave(
   const latestSnapshotRef = useRef<SopProsedurSnapshot>(snapshot)
   const timerRef = useRef<number | null>(null)
   const savedTimerRef = useRef<number | null>(null)
-  const inFlightRef = useRef<Promise<void> | null>(null)
+  const inFlightRef = useRef<Promise<boolean> | null>(null)
   const saveRef = useRef(save)
   saveRef.current = save
 
@@ -264,10 +237,10 @@ export function useSopProsedurAutosave(
     }, SAVED_INDICATOR_MS)
   }, [clearSavedTimer])
 
-  const performSave = useCallback(async (): Promise<void> => {
-    if (!enabled || !detailSopId) return
+  const performSave = useCallback(async (): Promise<boolean> => {
+    if (!enabled || !detailSopId) return true
     const diff = diffSopProsedurSnapshots(latestSnapshotRef.current, baselineRef.current)
-    if (!hasAnyKey(diff)) return
+    if (!hasAnyKey(diff)) return true
     const targetSnapshot = latestSnapshotRef.current
     clearSavedTimer()
     setStatus('saving')
@@ -278,19 +251,19 @@ export function useSopProsedurAutosave(
         setLastError(null)
         setStatus('saved')
         scheduleSavedFlash()
+        return true
       })
       .catch((err: unknown) => {
         const error = err instanceof Error ? err : new Error(String(err))
         setLastError(error)
         setStatus('error')
+        return false
       })
       .finally(() => {
-        if (inFlightRef.current === promise) {
-          inFlightRef.current = null
-        }
+        if (inFlightRef.current === promise) inFlightRef.current = null
       })
     inFlightRef.current = promise
-    await promise
+    return promise
   }, [clearSavedTimer, detailSopId, enabled, scheduleSavedFlash])
 
   const cancelTimer = useCallback(() => {
@@ -300,12 +273,13 @@ export function useSopProsedurAutosave(
     }
   }, [])
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<boolean> => {
     cancelTimer()
     if (inFlightRef.current) {
-      await inFlightRef.current
+      const inFlightSucceeded = await inFlightRef.current
+      if (!inFlightSucceeded) return false
     }
-    await performSave()
+    return performSave()
   }, [cancelTimer, performSave])
 
   const resetBaseline = useCallback(

@@ -4,9 +4,6 @@
  * Tujuan: hilangkan props drilling untuk state header SOP (metadata, implementers,
  * pelaksana, dasar hukum, keterkaitan SOP, dll.) dan turunannya. Ruang lingkup
  * Context dibatasi per halaman (mount/unmount mengikuti rute) — bukan store global.
- *
- * Komponen di bawah `<SopEditorProvider>` boleh konsumsi via `useSopEditor()`.
- * Dialog dan komponen UI murni (open/close, tombol) tetap pakai props lokal.
  */
 import {
   createContext,
@@ -26,42 +23,26 @@ import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop
 import type { SopProsedurAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-prosedur-autosave'
 
 export interface SopEditorContextValue {
-  /** ID DetailSOP atau header SOP yang sedang diedit (bisa undefined sebelum siap). */
   sopDetailId: string | undefined
-  /** Metadata header — source of truth UI selama editor terbuka. */
   metadata: SOPDetailMetadata
-  /** Setter generik (gunakan untuk update banyak field sekaligus). */
   setMetadata: React.Dispatch<React.SetStateAction<SOPDetailMetadata>>
-  /** Update satu field metadata (pengganti props drilling). */
   handleMetadataChange: <K extends keyof SOPDetailMetadata>(
     field: K,
     value: SOPDetailMetadata[K],
   ) => void
-  /** Daftar pelaksana terpakai pada SOP saat ini. */
   implementers: SopEditorImplementer[]
   setImplementers: React.Dispatch<React.SetStateAction<SopEditorImplementer[]>>
-  /** Opsi master pelaksana untuk dialog tambah pelaksana. */
   masterPelaksanaOptions: SopEditorMasterPelaksana[]
-  /** Daftar peraturan untuk dialog dasar hukum. */
   peraturanList: Peraturan[]
-  /** Opsi keterkaitan SOP (id = detailSopId terbaru per SOP). */
   relatedSopOptions: SopEditorRelatedSopOption[]
-  /** Baris prosedur (langkah) yang sedang diedit di main panel. */
   prosedurRows: ProsedurRow[]
   setProsedurRows: React.Dispatch<React.SetStateAction<ProsedurRow[]>>
-  /** Status autosave header (idle/pending/saving/saved/error). */
   autosaveStatus: SopHeaderAutosaveStatus
-  /** Error autosave header terakhir; berubah reference per error. */
   autosaveError: Error | null
-  /** Paksa flush autosave header SOP (mis. sebelum aksi besar / pindah halaman). */
-  flushHeaderAutosave: () => Promise<void>
-  /** Status autosave prosedur (swimlane + langkah). Disatukan di indikator UI bersama header. */
+  flushHeaderAutosave: () => Promise<boolean>
   prosedurAutosaveStatus: SopProsedurAutosaveStatus
-  /** Error autosave prosedur terakhir; reference baru per error. */
   prosedurAutosaveError: Error | null
-  /** Paksa flush autosave prosedur SOP. */
-  flushProsedurAutosave: () => Promise<void>
-  /** Dokumen hanya untuk dibaca (status tidak mengizinkan penyuntingan). */
+  flushProsedurAutosave: () => Promise<boolean>
   isReadOnly: boolean
 }
 
@@ -73,8 +54,6 @@ export interface SopEditorProviderProps {
 }
 
 export function SopEditorProvider({ value, children }: SopEditorProviderProps) {
-  /* Memoize agar consumer tidak ikut re-render saat parent re-render
-     selama nilai-nilai di dalamnya secara reference tidak berubah. */
   const memoized = useMemo<SopEditorContextValue>(
     () => ({
       sopDetailId: value.sopDetailId,
@@ -130,7 +109,6 @@ export function useSopEditor(): SopEditorContextValue {
   return ctx
 }
 
-/** Versi non-throwing untuk komponen yang dapat dipakai di luar provider (mis. halaman evaluator). */
 export function useSopEditorOptional(): SopEditorContextValue | null {
   return useContext(SopEditorContext)
 }

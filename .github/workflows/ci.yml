@@ -77,6 +77,8 @@ jobs:
       NODE_ENV: test
       E2E_TEST: "1"
       AI_DRAFT_PROVIDER: fake
+      AI_REVIEW_PROVIDER: fake
+      AI_REVIEW_TIMEOUT_MS: "30000"
       PORT: "3001"
       DATABASE_HOST: 127.0.0.1
       DATABASE_PORT: "3306"
@@ -129,8 +131,12 @@ jobs:
           done
           cat server/e2e-server.log
           exit 1
-      - name: Install Playwright Chromium
-        run: pnpm --dir client exec playwright install --with-deps chromium
+      - name: Verify hosted Chrome
+        run: |
+          command -v google-chrome
+          google-chrome --version
+      - name: Install Playwright video helper
+        run: pnpm --dir client exec playwright install ffmpeg
       - name: Run MVP vertical slice
         run: pnpm --dir client test:e2e
       - name: Upload E2E failure artifacts
@@ -166,6 +172,8 @@ jobs:
           MYSQL_ROOT_PASSWORD=root-ci-password
           AI_DRAFT_PROVIDER=disabled
           AI_DRAFT_TIMEOUT_MS=30000
+          AI_REVIEW_PROVIDER=disabled
+          AI_REVIEW_TIMEOUT_MS=30000
           SWAGGER_ENABLED=false
           BACKUP_DIR=./backups-ci
           BACKUP_RETENTION_DAYS=14

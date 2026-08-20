@@ -46,6 +46,8 @@ describe('Environment validation', () => {
       SOP_PDF_STORAGE_DIR: '/app/storage/sop-pdf',
       AI_DRAFT_PROVIDER: 'disabled',
       AI_DRAFT_TIMEOUT_MS: 30000,
+      AI_REVIEW_PROVIDER: 'disabled',
+      AI_REVIEW_TIMEOUT_MS: 30000,
     });
   });
 
@@ -92,10 +94,11 @@ describe('Environment validation', () => {
       PUBLIC_APP_ORIGIN: 'https://sop.example.test',
       ALLOWED_ORIGINS: 'https://sop.example.test',
       AI_DRAFT_PROVIDER: 'disabled',
+      AI_REVIEW_PROVIDER: 'disabled',
     });
   });
 
-  it('mewajibkan OpenAI API key dan model hanya ketika provider openai dipilih', () => {
+  it('mewajibkan OpenAI API key dan model ketika drafting openai dipilih', () => {
     expect(() =>
       validateEnv({
         ...baseEnv,
@@ -127,7 +130,39 @@ describe('Environment validation', () => {
     });
   });
 
-  it('membatasi timeout AI antara 1000 dan 120000 ms', () => {
+  it('mewajibkan OpenAI API key dan model ketika AI review openai dipilih', () => {
+    expect(() =>
+      validateEnv({
+        ...baseEnv,
+        AI_REVIEW_PROVIDER: 'openai',
+      }),
+    ).toThrow(/OPENAI_API_KEY/);
+
+    expect(() =>
+      validateEnv({
+        ...baseEnv,
+        AI_REVIEW_PROVIDER: 'openai',
+        OPENAI_API_KEY: 'sk-test-key',
+      }),
+    ).toThrow(/OPENAI_MODEL/);
+
+    expect(
+      validateEnv({
+        ...baseEnv,
+        AI_REVIEW_PROVIDER: 'openai',
+        OPENAI_API_KEY: '  sk-test-key  ',
+        OPENAI_MODEL: '  gpt-test-model  ',
+        AI_REVIEW_TIMEOUT_MS: '45000',
+      }),
+    ).toMatchObject({
+      AI_REVIEW_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'sk-test-key',
+      OPENAI_MODEL: 'gpt-test-model',
+      AI_REVIEW_TIMEOUT_MS: 45000,
+    });
+  });
+
+  it('membatasi timeout AI drafting antara 1000 dan 120000 ms', () => {
     expect(() =>
       validateEnv({
         ...baseEnv,
@@ -143,7 +178,23 @@ describe('Environment validation', () => {
     ).toThrow(/AI_DRAFT_TIMEOUT_MS/);
   });
 
-  it('mengizinkan fake provider pada test tetapi menolaknya pada production', () => {
+  it('membatasi timeout AI review antara 5000 dan 60000 ms', () => {
+    expect(() =>
+      validateEnv({
+        ...baseEnv,
+        AI_REVIEW_TIMEOUT_MS: '4999',
+      }),
+    ).toThrow(/AI_REVIEW_TIMEOUT_MS/);
+
+    expect(() =>
+      validateEnv({
+        ...baseEnv,
+        AI_REVIEW_TIMEOUT_MS: '60001',
+      }),
+    ).toThrow(/AI_REVIEW_TIMEOUT_MS/);
+  });
+
+  it('mengizinkan fake drafting provider pada test tetapi menolaknya pada production', () => {
     expect(
       validateEnv({
         ...baseEnv,
@@ -160,5 +211,24 @@ describe('Environment validation', () => {
         AI_DRAFT_PROVIDER: 'fake',
       }),
     ).toThrow(/AI_DRAFT_PROVIDER/);
+  });
+
+  it('mengizinkan fake review provider pada test tetapi menolaknya pada production', () => {
+    expect(
+      validateEnv({
+        ...baseEnv,
+        AI_REVIEW_PROVIDER: 'fake',
+      }),
+    ).toMatchObject({ AI_REVIEW_PROVIDER: 'fake' });
+
+    expect(() =>
+      validateEnv({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        PUBLIC_APP_ORIGIN: 'https://sop.example.test',
+        ALLOWED_ORIGINS: 'https://sop.example.test',
+        AI_REVIEW_PROVIDER: 'fake',
+      }),
+    ).toThrow(/AI_REVIEW_PROVIDER/);
   });
 });

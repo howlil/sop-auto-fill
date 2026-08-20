@@ -6,12 +6,14 @@ const authState = fileURLToPath(new URL('./e2e/.auth/user.json', import.meta.url
 const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173'
 const startClient = process.env.E2E_SKIP_WEB_SERVER !== 'true'
 const criticalAudit = process.env.E2E_CRITICAL === 'true'
+const useHostedChrome = Boolean(process.env.CI)
 
 export default defineConfig({
   testDir: fileURLToPath(new URL('./e2e', import.meta.url)),
   testMatch: [
     'journeys/mvp-vertical-slice.spec.ts',
     'journeys/ai-assisted-draft.spec.ts',
+    'journeys/ai-sop-quality-review.spec.ts',
   ],
   globalSetup: fileURLToPath(new URL('./e2e/global-setup.ts', import.meta.url)),
   timeout: 60_000,
@@ -48,7 +50,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(useHostedChrome ? { channel: 'chrome' as const } : {}),
+      },
     },
     ...(process.env.E2E_ALL_BROWSERS === 'true'
       ? [
