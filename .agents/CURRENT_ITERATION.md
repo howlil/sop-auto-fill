@@ -10,19 +10,9 @@
 
 ## Previous Iteration
 
-Iteration 5 `ai-sop-quality-review` sudah squash-merged ke `master` melalui PR #7 sebagai:
+Iteration 5 `ai-sop-quality-review` sudah squash-merged ke `master` melalui PR #7 sebagai `8881d1888599ff1413fd6a454d2a1ba1ca844811`.
 
-`8881d1888599ff1413fd6a454d2a1ba1ca844811`
-
-Final pre-merge verification Iteration 5 menggunakan CI #303 / run `32324819944` dan seluruh mandatory jobs sukses: server, client, e2e, production-compose. Final Playwright run: `4 passed` tanpa retry/flaky.
-
-## Implemented Product Flow
-
-```text
-Template -> AI Draft -> AI Review -> AI Revision
-```
-
-Iteration 6 sekarang mengimplementasikan:
+## Implemented Flow
 
 ```text
 SOP DRAFT
@@ -39,153 +29,102 @@ SOP DRAFT
   -> previous review/revision menjadi stale dan dibersihkan
 ```
 
-## Implemented Safety Boundary
+## Safety Boundary
 
-- tidak ada silent mutation;
-- tidak ada AI revision apply/write endpoint;
-- persistence hanya melalui existing header/procedure autosave;
-- suggestion server path hanya membaca authoritative snapshot dan memanggil provider;
-- satu textual target per proposal;
-- allowed targets hanya judul, satu existing `peringatan` item, step `kegiatan`, `kelengkapan`, `keluaran`, atau `keterangan`;
-- protected: nomor SOP, organization identity, actors/swimlanes, step count/order/type, decision routing, timing, regulations, related SOPs, lifecycle/versioning;
-- browser-supplied finding dan provider output diperlakukan sebagai untrusted;
-- server authoritative snapshot menentukan owner, status, allowed targets, canonical target, dan `before`;
-- provider-safe input tidak membawa `detailSopId`, user/workspace/SOP DB IDs, actor IDs, internal step IDs, email, token/cookie, audit log, official SOP number, organization identity, atau provider credentials;
-- provider output tidak boleh menentukan `before`;
-- stale network response dibuang bila detail/content/review fingerprint berubah;
-- stale apply ditolak bila exact current target value tidak lagi sama dengan authoritative `before`;
-- completed/archived SOP tetap immutable dan tidak menampilkan editing review/revision action;
-- tidak ada bulk fix-all, AI revision persistence/history/chat/job/background queue;
-- tidak ada RAG, regulation lookup, web/file retrieval, tools, compliance certification, collaboration, atau model selector;
-- tidak ada Prisma schema/migration baru.
+- Tidak ada silent mutation, bulk fix-all, atau AI revision apply/write endpoint.
+- Persistence hanya melalui existing header/procedure autosave.
+- Server suggestion path hanya membaca authoritative snapshot dan memanggil provider.
+- JWT auth, ownership, dan status `DRAFT` diverifikasi sebelum provider invocation.
+- Browser hanya mengirim selected finding dan tidak dapat menentukan arbitrary target.
+- Allowed targets hanya: judul SOP, satu existing `peringatan` item, step `kegiatan`, `kelengkapan`, `keluaran`, atau `keterangan`.
+- Protected: nomor SOP, organization identity, actors/swimlanes, step count/order/type, decision routing, timing, regulations, related SOPs, lifecycle, dan versioning.
+- Provider-safe input tidak membawa `detailSopId`, user/workspace/SOP DB IDs, actor IDs, internal step IDs, email, token/cookie, audit log, official SOP number, organization identity, atau provider credentials.
+- Provider output diperlakukan sebagai `unknown`; target dan `before` dikontrol/canonicalized aplikasi.
+- Stale network response dibuang bila detail/content/review fingerprint berubah.
+- Stale Apply ditolak bila exact current target value tidak lagi sama dengan canonical `before`.
+- Completed/archived SOP tetap immutable.
+- Tidak ada persisted revision history/chat/job/background queue, RAG, regulation lookup, web/file retrieval, tools, compliance certification, atau Prisma migration.
 
 ## Revision Eligibility
 
-Conservative allowlist yang diterapkan:
+- `HEADER + CLARITY` -> `JUDUL`.
+- `PERINGATAN + CLARITY | SUPPORTING_FIELD | COMPLETENESS` -> satu existing warning index.
+- `STEP + CLARITY` -> `KEGIATAN | KETERANGAN`.
+- `STEP + INPUT_OUTPUT` -> `KELENGKAPAN | KELUARAN`.
+- `STEP + COMPLETENESS` -> `KEGIATAN | KELENGKAPAN | KELUARAN | KETERANGAN`.
+- `STEP + SUPPORTING_FIELD` -> `KETERANGAN`.
+- Structural, actor, decision-routing, dan time-plausibility findings tetap manual.
 
-- `HEADER + CLARITY` -> `JUDUL`;
-- `PERINGATAN + CLARITY | SUPPORTING_FIELD | COMPLETENESS` -> satu existing warning index;
-- `STEP + CLARITY` -> `KEGIATAN | KETERANGAN`;
-- `STEP + INPUT_OUTPUT` -> `KELENGKAPAN | KELUARAN`;
-- `STEP + COMPLETENESS` -> `KEGIATAN | KELENGKAPAN | KELUARAN | KETERANGAN`;
-- `STEP + SUPPORTING_FIELD` -> `KETERANGAN`;
-- `PROCESS_STRUCTURE`, `ACTOR_RESPONSIBILITY`, `DECISION_ROUTING`, `TIME_PLAUSIBILITY`, actor-located findings, dan target di luar allowlist tetap manual.
+`peringatan.itemIndex` bersifat zero-based. `STEP.stepOrder` adalah human-visible one-based order.
 
-`peringatan.itemIndex` bersifat zero-based. `STEP.stepOrder` adalah urutan manusia one-based.
+## Runtime / Provider
 
-## Shared Authoritative Snapshot
-
-Iteration 5 review repository sudah diekstrak ke internal shared AI boundary:
-
-```text
-server/src/modules/sop/ai-common/
-  sop-ai-snapshot.repository.ts
-  sop-ai-snapshot.types.ts
-```
-
-AI Review dan AI Revision sekarang menggunakan satu read-only snapshot loader yang sama. Query tetap satu `detailSOP.findUnique`, mengurutkan lampiran/swimlane/langkah secara deterministik, mengubah internal decision target ID menjadi target step order, dan tidak memiliki create/update/delete atau mutating transaction path.
-
-## Runtime and Provider Boundary
-
-- `AI_REVISION_PROVIDER=disabled|openai|fake`, default `disabled`;
-- `AI_REVISION_TIMEOUT_MS=5000..60000`, default `30000`;
-- `openai` memakai existing server-side `OPENAI_API_KEY` + `OPENAI_MODEL`;
-- `fake` hanya test/development dan ditolak di production;
-- OpenAI adapter menggunakan backend-only Node 22 native `fetch` ke Responses API;
-- request memakai `store: false`, strict JSON Schema Structured Outputs, bounded timeout, dan tidak mengirim `tools` atau retrieval;
-- instructions memperlakukan SOP/finding sebagai untrusted data dan melarang perubahan protected structure, invented regulation/citation, compliance approval, atau external tool use;
-- 429/network/upstream/refusal/malformed output dipetakan ke application error yang sanitized;
-- tidak ada prompt, API key, atau full provider response logging;
-- production Compose dan production contract menetapkan revision provider `disabled` dan melarang fake provider.
+- `AI_REVISION_PROVIDER=disabled|openai|fake`, default `disabled`.
+- `AI_REVISION_TIMEOUT_MS=5000..60000`, default `30000`.
+- OpenAI memakai existing server-side `OPENAI_API_KEY` dan `OPENAI_MODEL`.
+- `fake` hanya untuk deterministic test/development dan ditolak di production.
+- OpenAI adapter memakai backend-only Node 22 native `fetch` ke Responses API, `store:false`, strict JSON Schema Structured Outputs, bounded timeout, tanpa tools/retrieval.
+- Error 429/network/upstream/refusal/malformed output dipetakan ke application error yang sanitized.
+- Tidak ada prompt, API key, atau full provider response logging.
 
 ## Client Apply Boundary
 
-Accepted proposal tidak memanggil revision write API. Pure helper `applyAiRevisionToEditor()` mengubah state editor yang sudah ada dan existing autosave menjadi satu-satunya persistence path.
+`applyAiRevisionToEditor()` adalah pure helper. Accepted proposal mengubah editor state existing; autosave existing tetap satu-satunya persistence path.
 
-Important compatibility behavior:
+Compatibility rules:
 
-- `KELENGKAPAN` mengubah `kelengkapan` dan legacy alias `mutu_kelengkapan` bersamaan;
-- `KELUARAN` mengubah `keluaran` dan legacy alias `output` bersamaan;
-- step target memakai human-visible one-based array position, bukan `row.urutan` lokal yang pada newly-added rows dapat belum ternormalisasi.
+- `KELENGKAPAN` mengubah `kelengkapan` dan legacy alias `mutu_kelengkapan` bersama-sama.
+- `KELUARAN` mengubah `keluaran` dan legacy alias `output` bersama-sama.
+- Step target memakai human-visible one-based array position, bukan transient local `row.urutan`.
+- Apply orchestration membaca latest editor/proposal/detail refs agar tidak memakai stale React closure snapshot, tetapi exact `before` guard tetap dipertahankan.
 
-## TDD / Regression Evidence
+## TDD / Acceptance Evidence
 
-RED/GREEN yang benar-benar dijalankan:
+RED/GREEN nyata mencakup shared snapshot extraction, revision target/schema, service trust boundary, runtime config, OpenAI transport, client request concurrency/staleness, pure Apply, panel/orchestration, acceptance provider isolation, dan human-visible step-order regression.
 
-1. **Shared snapshot repository**: RED karena `ai-common` repository belum ada; GREEN setelah query/mapping dipindahkan dan AI Review tetap regression-green.
-2. **Revision target/schema**: RED karena revision schema belum ada; GREEN setelah explicit allowlist, canonical `before`, length checks, no-op rejection, zero-based warning index, dan one-based step order.
-3. **Service trust boundary**: RED karena revision service/provider belum ada; GREEN setelah disabled/notfound/owner/DRAFT/eligibility checks dan provider-safe mapping.
-4. **Runtime config**: RED untuk missing `AI_REVISION_*`; GREEN dengan disabled default, timeout boundary, OpenAI credential dependency, dan production fake rejection.
-5. **OpenAI transport**: RED karena adapter belum ada; GREEN dengan Responses API, `store:false`, strict schema, no tools, timeout, dan sanitized errors.
-6. **Client request state**: RED karena API/hook belum ada; GREEN dengan autosave gate, transient proposal, request sequencing, and stale content/detail/review response rejection.
-7. **Pure Apply**: RED karena apply helper belum ada; GREEN setelah immutable mapping, stale `before` validation, alias-pair handling, dan no network/write dependency.
-8. **Panel/orchestration**: RED karena AI Review panel belum memiliki revision contract; GREEN setelah eligible/manual UX, preview, cancel/apply, and existing finding navigation.
-9. **Acceptance RED**: CI #357 menjalankan provider revision disabled. Empat existing journeys pass dan hanya new AI Revision journey gagal karena `Sarankan Perbaikan` tidak tersedia.
-10. **Acceptance GREEN debugging**: CI #358 membuktikan proposal/preview berhasil tetapi Apply ditolak pada newly-added local rows. Root cause ditemukan pada mismatch internal `row.urutan` 2/3/4 versus human-visible Langkah 1/2/3.
-11. **Step-order regression RED**: CI #359 menambahkan focused unit case dan 306 test lain pass sementara satu case human-visible order gagal.
-12. **Step-order regression GREEN**: Apply helper diperbaiki menggunakan human-visible one-based array position. CI #360 kemudian full green termasuk E2E.
+Key acceptance evidence:
+
+- **CI #357:** `AI_REVISION_PROVIDER` sengaja disabled. Empat journey existing pass dan hanya AI Revision journey gagal karena `Sarankan Perbaikan` unavailable.
+- **CI #358:** fake provider aktif; proposal/preview berhasil tetapi Apply menunjukkan regression pada transient local step ordering.
+- **Focused regression:** Apply diperbaiki memakai human-visible one-based row position.
+- **Latest-state Apply fix:** Apply orchestration kemudian diperketat agar membaca latest editor/proposal/detail refs tanpa mengendurkan stale `before` guard.
 
 ## Final Code-Bearing Verification
 
-Code-bearing head:
+Current code-bearing head:
 
-`c13e8ea763ae92fc844daa6932e457623d0231cb`
+`35007275d612c6520124be5dc62d4a024594ab9c`
 
-Mandatory CI #360 / run `32351852414` pada head tersebut:
+Mandatory CI **#362** / run `32358777269` pada head tersebut:
 
-- `server`: success;
-  - dependency install: success;
-  - Prisma generate: success;
-  - typecheck: success;
-  - full Jest suite: success;
-  - build: success;
-- `client`: success;
-  - typecheck: success;
-  - full Vitest suite: success;
-  - build: success;
-- `e2e`: success;
-- `production-compose`: success;
-  - production contract: success;
-  - image build: success;
-  - migrations idempotent: success;
-  - system template seed verification: success;
-  - MySQL/PDF volume persistence: success;
-  - backup retention: success;
-  - restore replacement: success;
-  - readiness/public ingress: success.
+- `server`: **success** — Prisma generate, typecheck, full Jest suite, build.
+- `client`: **success** — typecheck, full Vitest suite, build.
+- `e2e`: **success**.
+- `production-compose`: **success** — production contract, image build, idempotent migrations, seed verification, MySQL/PDF persistence, backup/restore, readiness/public ingress.
 
 Final Playwright log:
 
 ```text
-5 passed (1.6m)
+5 passed (1.5m)
 ```
 
-Journey coverage:
-
-- AI-assisted drafting: pass;
-- AI-assisted revision: pass;
-- AI SOP quality review: pass;
-- blank SOP lifecycle: pass;
-- system template lifecycle: pass.
-
-Tidak ada retry/flaky label pada final verified run.
+Tanpa retry/flaky label. Journey yang pass: AI-assisted draft, AI-assisted revision, AI SOP quality review, blank SOP lifecycle/versioning, dan system-template lifecycle/versioning.
 
 ## Focused Final Audit
 
-- branch `behind_by: 0` terhadap `master`;
-- changed-file audit tidak memuat `server/prisma/schema.prisma` atau migration baru;
-- tidak ada `ai-revisions/apply` route;
-- AI Revision service tidak memiliki application create/update/delete atau mutating transaction;
-- provider-safe input tidak membawa application DB ID, SOP number, institution identity, token, audit log, atau credential;
-- OpenAI request tidak membawa `tools`, web/file retrieval, atau RAG;
-- tidak ada prompt/API-key/full-provider-response logging pada AI Revision path;
-- fake revision provider hanya aktif pada E2E job dan production-compose tetap `disabled`;
-- pure Apply tidak dapat mengubah actor, routing, timing, step type/count/order, identity, lifecycle, atau versioning;
-- completed SOP tetap immutable;
-- PR #8 tidak memiliki inline review thread atau submitted review blocker.
+- Branch terhadap `master`: `ahead`, `behind_by: 0`.
+- Changed-file list tidak memuat `server/prisma/schema.prisma` atau migration baru.
+- Controller hanya menyediakan availability + transient `suggest`; tidak ada revision apply/write route.
+- Shared AI snapshot repository memakai satu `detailSOP.findUnique` dan tidak memiliki create/update/delete/mutating transaction.
+- AI Revision service melakukan provider-enabled, snapshot load, owner, dan `DRAFT` checks sebelum provider call.
+- Provider-safe mapping menghapus application DB IDs/internal step IDs serta tidak mengirim SOP number atau organization identity.
+- OpenAI request memakai `store:false`, strict JSON Schema, tanpa tools/web/file retrieval/RAG, dan tanpa sensitive logging.
+- Fake revision provider hanya aktif pada E2E; production-compose tetap `AI_REVISION_PROVIDER=disabled`.
+- Pure Apply tidak dapat mengubah actor, routing, timing, step type/count/order, identity, lifecycle, atau versioning.
+- PR #8 tidak memiliki inline review thread. Submitted review yang ada hanya Copilot quota notice dan bukan blocker.
 
 ## Merge Gate
 
-Implementation Iteration 6 selesai pada code-bearing head dan siap untuk final PR review. Karena iteration ini menambah external AI provider behavior dan server-side credential boundary baru, PR #8 **tidak boleh squash-merged ke `master` tanpa explicit final user approval** setelah documentation-head CI juga hijau.
+Iteration 6 berada pada `REVIEW_READY`. Karena iteration ini menambah external AI provider behavior dan server-side credential boundary, PR #8 **tidak boleh squash-merged ke `master` tanpa explicit final user approval** setelah documentation-head CI hijau.
 
-Jangan memulai Iteration 7 otomatis setelah merge. Transition berikutnya tetap memerlukan instruksi user eksplisit.
+Jangan memulai Iteration 7 otomatis setelah merge. Transition berikutnya memerlukan instruksi user eksplisit.
