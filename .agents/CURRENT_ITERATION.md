@@ -3,7 +3,7 @@
 - **Iteration:** `6-ai-assisted-revision`
 - **Status:** `DESIGN_SPEC_REVIEW`
 - **Working branch:** `feat/ai-assisted-revision`
-- **Pull request:** not created yet
+- **Pull request:** `#8`
 - **Goal:** menambahkan AI-assisted revision yang menghasilkan satu usulan perubahan tekstual transient dari finding AI Review, dengan preview before/after dan explicit user apply ke editor existing tanpa direct AI database write path.
 - **Design spec:** `.agents/plans/2026-08-20-ai-assisted-revision-design.md`
 - **Implementation plan:** not created; blocked until written design spec is approved by the user
@@ -81,7 +81,7 @@ Planned independent runtime boundary:
 
 ## Current Gate
 
-Design spec sudah ditulis pada branch Iteration 6 dan sekarang menunggu explicit user review/approval.
+Design spec sudah ditulis pada branch Iteration 6 dan draft PR #8 sekarang menjadi permukaan review. Status tetap `DESIGN_SPEC_REVIEW`.
 
 Dilarang sebelum approval tersebut:
 
