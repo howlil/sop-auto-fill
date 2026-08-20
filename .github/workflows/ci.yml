@@ -174,6 +174,8 @@ jobs:
           AI_DRAFT_TIMEOUT_MS=30000
           AI_REVIEW_PROVIDER=disabled
           AI_REVIEW_TIMEOUT_MS=30000
+          AI_REVISION_PROVIDER=disabled
+          AI_REVISION_TIMEOUT_MS=30000
           SWAGGER_ENABLED=false
           BACKUP_DIR=./backups-ci
           BACKUP_RETENTION_DAYS=14
