@@ -10,8 +10,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { JwtAccessPayload } from '../../../common';
 import { StatusSOP } from '../../../generated/prisma';
+import { SopAiSnapshotRepository } from '../ai-common/sop-ai-snapshot.repository';
 import { AI_REVIEW_PROVIDER, type AiReviewProvider } from './providers/ai-review-provider';
-import { SopAiReviewRepository } from './sop-ai-review.repository';
 import { parseAndCanonicalizeAiReview } from './sop-ai-review.schema';
 import type {
   SopQualityReviewProviderInput,
@@ -28,7 +28,7 @@ export interface SopAiReviewResponse {
 @Injectable()
 export class SopAiReviewService {
   constructor(
-    private readonly repository: SopAiReviewRepository,
+    private readonly repository: SopAiSnapshotRepository,
     @Inject(AI_REVIEW_PROVIDER) private readonly provider: AiReviewProvider,
     private readonly config: ConfigService,
   ) {}
@@ -42,7 +42,7 @@ export class SopAiReviewService {
       throw new ServiceUnavailableException('AI review belum tersedia');
     }
 
-    const context = await this.repository.findReviewContext(detailSopId);
+    const context = await this.repository.findContext(detailSopId);
     if (context === null) throw new NotFoundException('SOP tidak ditemukan');
     if (context.ownerId !== user.sub) throw new ForbiddenException('Akses SOP ditolak');
     if (context.status !== StatusSOP.DRAFT) {
