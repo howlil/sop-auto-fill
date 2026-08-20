@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, RefreshCcw } from 'lucide-react'
 import { DetailSOPPenyusunHeader } from './components/DetailSopPenyusunHeader'
@@ -99,6 +99,13 @@ export function DetailSOPPenyusun() {
     reviewFingerprint,
   })
 
+  const latestEditorStateRef = useRef({ metadata, prosedurRows })
+  latestEditorStateRef.current = { metadata, prosedurRows }
+  const latestRevisionProposalRef = useRef(aiRevision.proposal)
+  latestRevisionProposalRef.current = aiRevision.proposal
+  const latestDetailSopIdRef = useRef(sopDetailId)
+  latestDetailSopIdRef.current = sopDetailId
+
   useEffect(() => {
     if (combinedAutosaveError) {
       showErrorMessages(combinedAutosaveError, 'Gagal menyimpan perubahan otomatis')
@@ -124,9 +131,10 @@ export function DetailSOPPenyusun() {
   }, [])
 
   const handleApplyAiRevision = useCallback(() => {
-    const proposal = aiRevision.proposal
+    const proposal = latestRevisionProposalRef.current
+    const currentDetailSopId = latestDetailSopIdRef.current
     if (!proposal) return
-    if (proposal.sourceDetailSopId !== sopDetailId) {
+    if (proposal.sourceDetailSopId !== currentDetailSopId) {
       aiRevision.clear()
       showErrorMessages(
         new Error('Usulan AI sudah tidak berlaku untuk SOP yang sedang dibuka.'),
@@ -135,10 +143,8 @@ export function DetailSOPPenyusun() {
       return
     }
 
-    const applied = applyAiRevisionToEditor(
-      { metadata, prosedurRows },
-      proposal.suggestion,
-    )
+    const currentEditorState = latestEditorStateRef.current
+    const applied = applyAiRevisionToEditor(currentEditorState, proposal.suggestion)
     if (!applied.ok) {
       aiRevision.clear()
       showErrorMessages(
@@ -152,7 +158,7 @@ export function DetailSOPPenyusun() {
     setProsedurRows(applied.prosedurRows)
     aiRevision.clear()
     aiReview.clearReview()
-  }, [aiRevision, aiReview, metadata, prosedurRows, setMetadata, setProsedurRows, sopDetailId])
+  }, [aiRevision.clear, aiReview.clearReview, setMetadata, setProsedurRows])
 
   const contextValue = useMemo<SopEditorContextValue>(
     () => ({
