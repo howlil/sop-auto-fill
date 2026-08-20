@@ -49,6 +49,6 @@ describe('useAiSopRevision concurrency', () => {
     await waitFor(()=>expect(suggestMock).toHaveBeenCalledTimes(2))
     second.resolve(makeResponse('Usulan terbaru')); await act(async()=>{await secondRequest})
     first.resolve(makeResponse('Usulan lama')); await act(async()=>{await firstRequest})
-    expect(hook.result.current.proposal?.data.suggestion.after).toBe('Usulan terbaru')
+    expect(hook.result.current.proposal?.suggestion.after).toBe('Usulan terbaru')
   })
 })
