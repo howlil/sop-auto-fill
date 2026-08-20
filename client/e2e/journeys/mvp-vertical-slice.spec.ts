@@ -92,30 +92,32 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.locator('iframe[src^="blob:"]').waitFor({ state: 'attached', timeout: 30_000 })
   await expect(page.getByText('Gagal menyiapkan PDF. Coba muat ulang halaman.')).toHaveCount(0)
 
-  // Headless Chromium does not drive the OS print lifecycle reliably. Re-loading after
-  // the real PDF blob/print iframe exists proves generation while keeping the journey deterministic.
-  await page.reload()
-  await waitForAppHydration(page)
-  await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  // The PDF iframe proves generation, but hosted headless Chrome can leave the renderer
+  // in an unsafe print state. Continue in a fresh page that shares the same authenticated context.
+  const editorUrlAfterPdf = page.url()
+  const continuationPage = await page.context().newPage()
+  await continuationPage.goto(editorUrlAfterPdf)
+  await waitForAppHydration(continuationPage)
+  await expect(continuationPage.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
 
-  await page.getByRole('button', { name: 'Selesai' }).click()
-  await page.getByRole('button', { name: 'Ya, selesai' }).click()
-  await expect(page.getByRole('button', { name: 'Buat versi baru' })).toBeVisible({
+  await continuationPage.getByRole('button', { name: 'Selesai' }).click()
+  await continuationPage.getByRole('button', { name: 'Ya, selesai' }).click()
+  await expect(continuationPage.getByRole('button', { name: 'Buat versi baru' })).toBeVisible({
     timeout: 20_000,
   })
-  await expect(page.getByPlaceholder('Judul SOP')).toHaveCount(0)
+  await expect(continuationPage.getByPlaceholder('Judul SOP')).toHaveCount(0)
 
-  const completedUrl = page.url()
-  await page.getByRole('button', { name: 'Buat versi baru' }).click()
-  await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(completedUrl)
-  await waitForAppHydration(page)
-  await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
-  await page.getByRole('button', { name: 'Langkah' }).click()
-  await expect(visibleProcedureField(page, 'Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
-  await expect(visibleProcedureField(page, 'Kelengkapan').nth(1)).toHaveValue('Dokumen input')
-  await page.getByRole('button', { name: 'Selesai edit' }).click()
-  await expect(page.getByText('v2', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Selesai' })).toBeVisible()
+  const completedUrl = continuationPage.url()
+  await continuationPage.getByRole('button', { name: 'Buat versi baru' }).click()
+  await expect.poll(() => continuationPage.url(), { timeout: 20_000 }).not.toBe(completedUrl)
+  await waitForAppHydration(continuationPage)
+  await expect(continuationPage.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  await continuationPage.getByRole('button', { name: 'Langkah' }).click()
+  await expect(visibleProcedureField(continuationPage, 'Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
+  await expect(visibleProcedureField(continuationPage, 'Kelengkapan').nth(1)).toHaveValue('Dokumen input')
+  await continuationPage.getByRole('button', { name: 'Selesai edit' }).click()
+  await expect(continuationPage.getByText('v2', { exact: true })).toBeVisible()
+  await expect(continuationPage.getByRole('button', { name: 'Selesai' })).toBeVisible()
 })
 
 test('system template creates a normal draft and preserves the existing lifecycle', async ({ page }, testInfo) => {
