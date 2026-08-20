@@ -205,7 +205,8 @@ export function AiSopQualityReviewPanel({
                         onClick={() => onSelectFinding(finding)}
                         className="inline-flex items-center rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        Buka lokasi <ChevronRight className="ml-1 h-3.5 w-3.5" aria-hidden />
+                        Buka lokasi · {locationLabel(finding.location)}
+                        <ChevronRight className="ml-1 h-3.5 w-3.5" aria-hidden />
                       </button>
                       {canSuggest ? (
                         <button
