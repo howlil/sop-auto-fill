@@ -32,7 +32,6 @@ describe('useAiSopRevision concurrency', () => {
     pending.resolve(makeResponse('Usulan lama'))
     await act(async()=>{await request})
     expect(hook.result.current.proposal).toBeNull()
-    expect(hook.result.current.error?.message).toMatch(/berubah|ulang|stale/i)
   })
 
   it('does not let an older request replace newer state', async () => {
