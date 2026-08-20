@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, RefreshCcw } from 'lucide-react'
 import { DetailSOPPenyusunHeader } from './components/DetailSopPenyusunHeader'
@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button'
 import { showErrorMessages } from '@/hooks/useToast'
 import { useDetailSopPenyusun } from '@/api/sop'
 import { SopEditorProvider, type SopEditorContextValue } from './SopEditorContext'
+import { applyAiRevisionToEditor } from './ai-sop-revision-apply'
 import { useAiSopQualityReview } from '@/pages/penyusun/sop/hooks/use-ai-sop-quality-review'
+import { useAiSopRevision } from '@/pages/penyusun/sop/hooks/use-ai-sop-revision'
 import type { SopHeaderAutosaveStatus } from '@/pages/penyusun/sop/hooks/use-sop-header-autosave'
 import type { SopQualityFinding } from '@/api/workspace-sops'
 
@@ -85,6 +87,24 @@ export function DetailSOPPenyusun() {
     flushAllAutosave,
     contentFingerprint,
   })
+  const reviewFingerprint = useMemo(
+    () => (aiReview.review ? JSON.stringify(aiReview.review.result) : null),
+    [aiReview.review],
+  )
+  const aiRevision = useAiSopRevision({
+    detailSopId: sopDetailId,
+    isReadOnly,
+    flushAllAutosave,
+    contentFingerprint,
+    reviewFingerprint,
+  })
+
+  const latestEditorStateRef = useRef({ metadata, prosedurRows })
+  latestEditorStateRef.current = { metadata, prosedurRows }
+  const latestRevisionProposalRef = useRef(aiRevision.proposal)
+  latestRevisionProposalRef.current = aiRevision.proposal
+  const latestDetailSopIdRef = useRef(sopDetailId)
+  latestDetailSopIdRef.current = sopDetailId
 
   useEffect(() => {
     if (combinedAutosaveError) {
@@ -109,6 +129,36 @@ export function DetailSOPPenyusun() {
       target?.querySelector<HTMLElement>('input, textarea, button, [tabindex]')?.focus()
     })
   }, [])
+
+  const handleApplyAiRevision = useCallback(() => {
+    const proposal = latestRevisionProposalRef.current
+    const currentDetailSopId = latestDetailSopIdRef.current
+    if (!proposal) return
+    if (proposal.sourceDetailSopId !== currentDetailSopId) {
+      aiRevision.clear()
+      showErrorMessages(
+        new Error('Usulan AI sudah tidak berlaku untuk SOP yang sedang dibuka.'),
+        'Usulan AI tidak dapat diterapkan',
+      )
+      return
+    }
+
+    const currentEditorState = latestEditorStateRef.current
+    const applied = applyAiRevisionToEditor(currentEditorState, proposal.suggestion)
+    if (!applied.ok) {
+      aiRevision.clear()
+      showErrorMessages(
+        new Error('Bagian SOP berubah setelah usulan dibuat. Minta usulan AI ulang.'),
+        'Usulan AI tidak dapat diterapkan',
+      )
+      return
+    }
+
+    setMetadata(applied.metadata)
+    setProsedurRows(applied.prosedurRows)
+    aiRevision.clear()
+    aiReview.clearReview()
+  }, [aiRevision.clear, aiReview.clearReview, setMetadata, setProsedurRows])
 
   const contextValue = useMemo<SopEditorContextValue>(
     () => ({
@@ -226,6 +276,16 @@ export function DetailSOPPenyusun() {
                 error: aiReview.error,
                 onRunReview: aiReview.runReview,
                 onSelectFinding: handleSelectAiFinding,
+                aiRevision: {
+                  isAvailable: aiRevision.isAvailable,
+                  isAvailabilityLoading: aiRevision.isAvailabilityLoading,
+                  isRunning: aiRevision.isRunning,
+                  proposal: aiRevision.proposal,
+                  error: aiRevision.error,
+                  onSuggest: aiRevision.suggest,
+                  onCancel: aiRevision.cancel,
+                  onApply: handleApplyAiRevision,
+                },
               }}
               auditEntries={auditLogs}
               isReadOnly={isReadOnly}

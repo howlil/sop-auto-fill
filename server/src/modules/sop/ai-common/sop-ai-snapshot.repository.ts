@@ -1,19 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import type { StatusSOP } from '../../../generated/prisma';
-import type { SopQualityReviewSnapshot } from './sop-ai-review.types';
-
-export interface SopAiReviewContext {
-  ownerId: string;
-  status: StatusSOP;
-  snapshot: SopQualityReviewSnapshot;
-}
+import type { SopAiSnapshotContext } from './sop-ai-snapshot.types';
 
 @Injectable()
-export class SopAiReviewRepository {
+export class SopAiSnapshotRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findReviewContext(detailSopId: string): Promise<SopAiReviewContext | null> {
+  async findContext(detailSopId: string): Promise<SopAiSnapshotContext | null> {
     const row = await this.prisma.detailSOP.findUnique({
       where: { detailSopId },
       include: {

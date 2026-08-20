@@ -79,7 +79,7 @@ const validProviderResult = {
 };
 
 function makeService(mode: 'disabled' | 'fake' | 'openai' = 'fake') {
-  const repository = { findReviewContext: jest.fn() };
+  const repository = { findContext: jest.fn() };
   const provider = { review: jest.fn() };
   const config = {
     get: jest.fn((key: string) => (key === 'AI_REVIEW_PROVIDER' ? mode : undefined)),
@@ -100,13 +100,13 @@ describe('SopAiReviewService', () => {
     await expect(service.review(user, 'detail-db-1')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
-    expect(repository.findReviewContext).not.toHaveBeenCalled();
+    expect(repository.findContext).not.toHaveBeenCalled();
     expect(provider.review).not.toHaveBeenCalled();
   });
 
   it('memetakan SOP tidak ditemukan menjadi 404 tanpa memanggil provider', async () => {
     const { service, repository, provider } = makeService();
-    repository.findReviewContext.mockResolvedValue(null);
+    repository.findContext.mockResolvedValue(null);
 
     await expect(service.review(user, 'missing')).rejects.toBeInstanceOf(NotFoundException);
     expect(provider.review).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('SopAiReviewService', () => {
 
   it('memeriksa ownership sebelum provider invocation', async () => {
     const { service, repository, provider } = makeService();
-    repository.findReviewContext.mockResolvedValue({
+    repository.findContext.mockResolvedValue({
       ownerId: 'other-user',
       status: StatusSOP.DRAFT,
       snapshot,
@@ -130,7 +130,7 @@ describe('SopAiReviewService', () => {
     'menolak status %s sebelum provider invocation',
     async (status) => {
       const { service, repository, provider } = makeService();
-      repository.findReviewContext.mockResolvedValue({ ownerId: user.sub, status, snapshot });
+      repository.findContext.mockResolvedValue({ ownerId: user.sub, status, snapshot });
 
       await expect(service.review(user, 'detail-db-1')).rejects.toBeInstanceOf(
         ConflictException,
@@ -141,7 +141,7 @@ describe('SopAiReviewService', () => {
 
   it('mengirim hanya provider-safe snapshot tanpa application DB IDs', async () => {
     const { service, repository, provider } = makeService();
-    repository.findReviewContext.mockResolvedValue({
+    repository.findContext.mockResolvedValue({
       ownerId: user.sub,
       status: StatusSOP.DRAFT,
       snapshot,
@@ -182,7 +182,7 @@ describe('SopAiReviewService', () => {
 
   it('menolak structured output invalid dengan 422 aman', async () => {
     const { service, repository, provider } = makeService();
-    repository.findReviewContext.mockResolvedValue({
+    repository.findContext.mockResolvedValue({
       ownerId: user.sub,
       status: StatusSOP.DRAFT,
       snapshot,

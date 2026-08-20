@@ -47,6 +47,14 @@ grep -q 'AI_REVIEW_PROVIDER: disabled' <<<"$backend_block" || {
   echo "fake AI review provider must never be used by production Compose" >&2
   exit 1
 }
+grep -q 'AI_REVISION_PROVIDER: disabled' <<<"$backend_block" || {
+  echo "production AI revision must default to disabled" >&2
+  exit 1
+}
+! grep -q 'AI_REVISION_PROVIDER: fake' <<<"$backend_block" || {
+  echo "fake AI revision provider must never be used by production Compose" >&2
+  exit 1
+}
 
 grep -q 'source: mysql_data' "$tmp" || { echo "mysql_data source missing" >&2; exit 1; }
 grep -q 'target: /var/lib/mysql' "$tmp" || { echo "mysql persistence target missing" >&2; exit 1; }

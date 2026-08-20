@@ -141,6 +141,26 @@ export interface SopQualityReviewResponse {
   };
 }
 
+export type SopAiRevisionTarget =
+  | { kind: "HEADER"; field: "JUDUL" }
+  | { kind: "PERINGATAN"; itemIndex: number }
+  | {
+      kind: "STEP";
+      stepOrder: number;
+      field: "KEGIATAN" | "KELENGKAPAN" | "KELUARAN" | "KETERANGAN";
+    };
+
+export interface SopAiRevisionResponse {
+  sourceDetailSopId: string;
+  sourceVersion: number;
+  suggestion: {
+    target: SopAiRevisionTarget;
+    before: string;
+    after: string;
+    rationale: string;
+  };
+}
+
 export const workspaceSopApi = {
   list: (workspaceId: string) =>
     apiClient.get<ApiSuccessResponse<WorkspaceSopRow[]>>(
@@ -173,5 +193,12 @@ export const workspaceSopApi = {
   reviewAiSop: (detailSopId: string) =>
     apiClient.post<ApiSuccessResponse<SopQualityReviewResponse>>(
       `/sop/${encodeURIComponent(detailSopId)}/ai-review`,
+    ),
+  aiRevisionAvailability: () =>
+    apiClient.get<ApiSuccessResponse<{ enabled: boolean }>>("/sop/ai-revisions/availability"),
+  suggestAiRevision: (detailSopId: string, finding: SopQualityFinding) =>
+    apiClient.post<ApiSuccessResponse<SopAiRevisionResponse>>(
+      `/sop/${encodeURIComponent(detailSopId)}/ai-revisions/suggest`,
+      { finding },
     ),
 };

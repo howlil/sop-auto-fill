@@ -61,12 +61,16 @@ const envSchema = z
     AI_DRAFT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
     AI_REVIEW_PROVIDER: aiProviderSchema,
     AI_REVIEW_TIMEOUT_MS: z.coerce.number().int().min(5000).max(60000).default(30000),
+    AI_REVISION_PROVIDER: aiProviderSchema,
+    AI_REVISION_TIMEOUT_MS: z.coerce.number().int().min(5000).max(60000).default(30000),
     OPENAI_API_KEY: optionalTrimmedString,
     OPENAI_MODEL: optionalTrimmedString,
   })
   .superRefine((data, ctx) => {
     const usesOpenAi =
-      data.AI_DRAFT_PROVIDER === 'openai' || data.AI_REVIEW_PROVIDER === 'openai';
+      data.AI_DRAFT_PROVIDER === 'openai' ||
+      data.AI_REVIEW_PROVIDER === 'openai' ||
+      data.AI_REVISION_PROVIDER === 'openai';
     if (usesOpenAi) {
       if (!data.OPENAI_API_KEY) {
         ctx.addIssue({
@@ -98,6 +102,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: 'AI_REVIEW_PROVIDER=fake hanya diizinkan untuk test/development',
         path: ['AI_REVIEW_PROVIDER'],
+      });
+    }
+    if (data.AI_REVISION_PROVIDER === 'fake') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'AI_REVISION_PROVIDER=fake hanya diizinkan untuk test/development',
+        path: ['AI_REVISION_PROVIDER'],
       });
     }
 

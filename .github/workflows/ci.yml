@@ -79,6 +79,8 @@ jobs:
       AI_DRAFT_PROVIDER: fake
       AI_REVIEW_PROVIDER: fake
       AI_REVIEW_TIMEOUT_MS: "30000"
+      AI_REVISION_PROVIDER: fake
+      AI_REVISION_TIMEOUT_MS: "30000"
       PORT: "3001"
       DATABASE_HOST: 127.0.0.1
       DATABASE_PORT: "3306"
@@ -174,6 +176,8 @@ jobs:
           AI_DRAFT_TIMEOUT_MS=30000
           AI_REVIEW_PROVIDER=disabled
           AI_REVIEW_TIMEOUT_MS=30000
+          AI_REVISION_PROVIDER=disabled
+          AI_REVISION_TIMEOUT_MS=30000
           SWAGGER_ENABLED=false
           BACKUP_DIR=./backups-ci
           BACKUP_RETENTION_DAYS=14
