@@ -48,10 +48,11 @@ export function deriveAllowedRevisionTargets(
     return snapshot.peringatan.map((_, itemIndex) => ({ kind: 'PERINGATAN', itemIndex }));
   }
 
-  if (finding.location.kind !== 'STEP') return [];
-  if (!snapshot.steps.some((step) => step.urutan === finding.location.stepOrder)) return [];
+  const location = finding.location;
+  if (location.kind !== 'STEP') return [];
+  if (!snapshot.steps.some((step) => step.urutan === location.stepOrder)) return [];
 
-  const stepOrder = finding.location.stepOrder;
+  const stepOrder = location.stepOrder;
   switch (finding.category) {
     case 'CLARITY':
       return [
