@@ -21,6 +21,21 @@ describe('applyAiRevisionToEditor', () => {
     expect(ket.ok && ket.prosedurRows[0].keterangan).toBe('Catatan baru')
   })
 
+  it('uses human-visible one-based row order even when local urutan is not normalized yet', () => {
+    const newlyAddedRows: ProsedurRow[] = [
+      { ...rows[0], id:'temp-1', urutan:2, no:1, kegiatan:'Proses awal' },
+      { ...rows[0], id:'temp-2', urutan:3, no:2, kegiatan:'Proses kedua' },
+      { ...rows[0], id:'temp-3', urutan:4, no:3, kegiatan:'Proses ketiga' },
+    ]
+    const result=applyAiRevisionToEditor(
+      {metadata,prosedurRows:newlyAddedRows},
+      {target:{kind:'STEP',stepOrder:1,field:'KEGIATAN'},before:'Proses awal',after:'Proses awal yang diperjelas',rationale:'x'},
+    )
+    expect(result.ok).toBe(true)
+    expect(result.ok && result.prosedurRows[0].kegiatan).toBe('Proses awal yang diperjelas')
+    expect(result.ok && result.prosedurRows[1].kegiatan).toBe('Proses kedua')
+  })
+
   it('updates both legacy aliases for kelengkapan and keluaran', () => {
     const kel=applyAiRevisionToEditor({metadata,prosedurRows:rows},{target:{kind:'STEP',stepOrder:1,field:'KELENGKAPAN'},before:'Form lama',after:'Form baru',rationale:'x'})
     expect(kel.ok && kel.prosedurRows[0]).toMatchObject({kelengkapan:'Form baru',mutu_kelengkapan:'Form baru'})
