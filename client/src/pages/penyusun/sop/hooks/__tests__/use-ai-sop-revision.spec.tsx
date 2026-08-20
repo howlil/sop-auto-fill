@@ -43,7 +43,7 @@ describe('useAiSopRevision', () => {
     await act(async () => { await hook.result.current.suggest(finding) })
     expect(hook.flushAllAutosave).toHaveBeenCalledOnce()
     expect(suggestMock).toHaveBeenCalledWith('detail-1', finding)
-    expect(hook.result.current.proposal?.data.suggestion.after).toContain('Berita acara')
+    expect(hook.result.current.proposal?.suggestion.after).toContain('Berita acara')
     expect(hook.result.current.selectedFinding).toEqual(finding)
   })
 
