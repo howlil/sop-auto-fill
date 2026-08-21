@@ -170,6 +170,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   const templateItems = templates.data?.data ?? [];
   const preview = templatePreview.data?.data;
   const aiEnabled = aiAvailability.data?.data.enabled === true;
+  const workspaceName = workspace.data?.data.name ?? "Workspace";
 
   const visibleItems = useMemo(() => {
     const needle = searchQuery.trim().toLocaleLowerCase("id-ID");
@@ -237,143 +238,176 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   };
 
   return (
-    <main className="min-h-screen bg-surface-subtle">
+    <main data-workspace-shell="workbench" className="min-h-screen bg-surface-subtle">
       <header className="border-b border-border bg-background">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-5 py-5 sm:px-6">
-          <a
-            href="/workspaces"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Kembali ke daftar workspace"
-          >
-            <ArrowLeft className="h-4 w-4" />
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3 sm:px-6">
+          <a href="/workspaces" className="shrink-0 text-sm font-semibold text-foreground">
+            SOP Auto Fill
           </a>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-semibold text-foreground">
-              {workspace.data?.data.name ?? "Workspace"}
-            </h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Kelola dan susun SOP dalam satu tempat.
-            </p>
+          <div className="hidden min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground sm:flex">
+            <span>/</span>
+            <a href="/workspaces" className="hover:text-foreground">Workspaces</a>
+            <span>/</span>
+            <span className="truncate font-medium text-foreground">{workspaceName}</span>
           </div>
-          <Button
-            type="button"
-            className="h-10 gap-2 px-4"
-            onClick={() => setIsCreateOpen(true)}
-          >
+          <Button type="button" className="ml-auto h-9 gap-2 px-4" onClick={() => setIsCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Buat SOP
           </Button>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-5 py-7 sm:px-6 sm:py-9">
-        <div className="mb-7 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-background px-4 py-4">
-            <p className="text-sm text-muted-foreground">Total SOP</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{items.length}</p>
+      <div className="mx-auto grid max-w-7xl lg:min-h-[calc(100vh-57px)] lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside
+          aria-label="Navigasi workspace"
+          className="hidden border-r border-border bg-background px-4 py-6 lg:block"
+        >
+          <div className="px-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Workspace</p>
+            <p className="mt-2 truncate text-sm font-semibold text-foreground">{workspaceName}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{items.length} SOP</p>
           </div>
-          <div className="rounded-xl border border-border bg-background px-4 py-4">
-            <p className="text-sm text-muted-foreground">Sedang dikerjakan</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{draftCount}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-background px-4 py-4">
-            <p className="text-sm text-muted-foreground">Selesai</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{completedCount}</p>
-          </div>
-        </div>
 
-        <div className="rounded-2xl border border-border bg-background">
-          <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <nav className="mt-7 space-y-1">
+            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Navigasi</p>
+            <a
+              href={`/workspaces/${workspaceId}`}
+              aria-current="page"
+              className="flex items-center gap-2 rounded-lg bg-primary-subtle px-3 py-2 text-sm font-medium text-primary"
+            >
+              <FileText className="h-4 w-4" />
+              Dokumen SOP
+            </a>
+          </nav>
+
+          <a
+            href="/workspaces"
+            className="mt-8 flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Kembali ke Workspaces
+          </a>
+        </aside>
+
+        <section className="min-w-0 px-5 py-6 sm:px-6 sm:py-8 lg:px-8">
+          <a
+            href="/workspaces"
+            className="mb-4 inline-flex items-center gap-2 text-xs font-medium text-muted-foreground lg:hidden"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Kembali ke Workspaces
+          </a>
+
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Dokumen SOP</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Cari dokumen yang sedang dikerjakan atau buka versi yang sudah selesai.
-              </p>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <label className="relative block min-w-0 sm:w-64">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Cari judul atau nomor SOP"
-                  className="h-10 pl-9"
-                  aria-label="Cari SOP"
-                />
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-                aria-label="Filter status SOP"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <p className="text-xs font-medium text-muted-foreground">Workspace</p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{workspaceName}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Kelola seluruh dokumen SOP dari satu workbench.</p>
             </div>
           </div>
 
-          {sops.isLoading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">Memuat SOP...</div>
-          ) : sops.isError ? (
-            <div className="p-8 text-center text-sm text-destructive">Gagal memuat SOP.</div>
-          ) : visibleItems.length === 0 ? (
-            <div className="px-6 py-14 text-center">
-              <FileText className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
-              <p className="font-medium text-foreground">
-                {items.length === 0 ? "Belum ada SOP" : "Tidak ada SOP yang cocok"}
-              </p>
-              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-                {items.length === 0
-                  ? "Mulai dari AI, template, atau dokumen kosong."
-                  : "Ubah kata pencarian atau filter status untuk melihat dokumen lain."}
-              </p>
-              {items.length === 0 ? (
-                <Button className="mt-5 gap-2" onClick={() => setIsCreateOpen(true)}>
-                  <Plus className="h-4 w-4" /> Buat SOP pertama
-                </Button>
-              ) : null}
+          <div className="mb-6 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border bg-background px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">Total SOP</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{items.length}</p>
             </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {visibleItems.map((sop) => (
-                <a
-                  key={sop.id}
-                  href={sop.detailSopId ? `/workspaces/${workspaceId}/sops/${sop.detailSopId}` : "#"}
-                  className="group flex items-center justify-between gap-4 px-4 py-4 transition-colors hover:bg-muted/40 sm:px-5"
+            <div className="rounded-lg border border-border bg-background px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">Draft</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{draftCount}</p>
+            </div>
+            <div className="rounded-lg border border-border bg-background px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">Selesai</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{completedCount}</p>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-background">
+            <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Dokumen SOP</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Cari, filter, lalu buka dokumen untuk melanjutkan pekerjaan.</p>
+              </div>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <label className="relative block min-w-0 sm:w-64">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Cari judul atau nomor SOP"
+                    className="h-9 pl-9"
+                    aria-label="Cari SOP"
+                  />
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                  aria-label="Filter status SOP"
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-medium text-foreground group-hover:text-primary">
-                        {sop.judul}
-                      </p>
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-xs font-medium",
-                          sop.status === "DRAFT" && "bg-amber-50 text-amber-700",
-                          sop.status === "COMPLETED" && "bg-emerald-50 text-emerald-700",
-                          sop.status === "ARCHIVED" && "bg-slate-100 text-slate-600",
-                        )}
-                      >
-                        {sop.statusLabel}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {sop.nomorSop ?? "Belum ada nomor"} · v{sop.versi ?? 1} · Diperbarui {formatUpdatedAt(sop.terakhirDiperbarui)}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-                    Buka →
-                  </span>
-                </a>
-              ))}
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
-        </div>
-      </section>
+
+            {sops.isLoading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Memuat SOP...</div>
+            ) : sops.isError ? (
+              <div className="p-8 text-center text-sm text-destructive">Gagal memuat SOP.</div>
+            ) : visibleItems.length === 0 ? (
+              <div className="px-6 py-14 text-center">
+                <FileText className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
+                <p className="font-medium text-foreground">
+                  {items.length === 0 ? "Belum ada SOP" : "Tidak ada SOP yang cocok"}
+                </p>
+                <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                  {items.length === 0
+                    ? "Mulai dari AI, template, atau dokumen kosong."
+                    : "Ubah kata pencarian atau filter status untuk melihat dokumen lain."}
+                </p>
+                {items.length === 0 ? (
+                  <Button className="mt-5 gap-2" onClick={() => setIsCreateOpen(true)}>
+                    <Plus className="h-4 w-4" /> Buat SOP pertama
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {visibleItems.map((sop) => (
+                  <a
+                    key={sop.id}
+                    href={sop.detailSopId ? `/workspaces/${workspaceId}/sops/${sop.detailSopId}` : "#"}
+                    className="group flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-medium text-foreground group-hover:text-primary">{sop.judul}</p>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            sop.status === "DRAFT" && "bg-amber-50 text-amber-700",
+                            sop.status === "COMPLETED" && "bg-emerald-50 text-emerald-700",
+                            sop.status === "ARCHIVED" && "bg-slate-100 text-slate-600",
+                          )}
+                        >
+                          {sop.statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {sop.nomorSop ?? "Belum ada nomor"} · v{sop.versi ?? 1} · Diperbarui {formatUpdatedAt(sop.terakhirDiperbarui)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">Buka →</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
 
       <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent className="max-w-3xl">
@@ -401,9 +435,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                   )}
                 >
                   {badge ? (
-                    <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
-                      {badge}
-                    </span>
+                    <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">{badge}</span>
                   ) : null}
                   <span className="mb-8 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-foreground">
                     <Icon className="h-5 w-5" />
@@ -420,13 +452,9 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                   {createSource === "ai" ? <Sparkles className="h-4 w-4" /> : null}
                   {createSource === "template" ? <LayoutTemplate className="h-4 w-4" /> : null}
                   {createSource === "blank" ? <FilePlus2 className="h-4 w-4" /> : null}
-                  <span className="font-medium text-foreground">
-                    {CREATE_OPTIONS.find((option) => option.id === createSource)?.title}
-                  </span>
+                  <span className="font-medium text-foreground">{CREATE_OPTIONS.find((option) => option.id === createSource)?.title}</span>
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateSource(null)}>
-                  Ganti cara
-                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateSource(null)}>Ganti cara</Button>
               </div>
 
               {createSource === "ai" ? (
@@ -444,9 +472,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                       rows={6}
                       className="mt-2 text-sm"
                     />
-                    <span className="mt-1.5 block text-xs font-normal text-muted-foreground">
-                      Sebutkan pelaksana, aktivitas utama, keputusan penting, input, dan hasil proses.
-                    </span>
+                    <span className="mt-1.5 block text-xs font-normal text-muted-foreground">Sebutkan pelaksana, aktivitas utama, keputusan penting, input, dan hasil proses.</span>
                   </label>
                   <details className="rounded-lg border border-border px-4 py-3">
                     <summary className="cursor-pointer text-sm font-medium text-foreground">Tambahkan konteks opsional</summary>
@@ -481,9 +507,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                   </details>
 
                   {aiAvailability.isSuccess && !aiEnabled ? (
-                    <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-                      AI drafting belum aktif pada environment ini. Gunakan template atau dokumen kosong.
-                    </p>
+                    <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">AI drafting belum aktif pada environment ini. Gunakan template atau dokumen kosong.</p>
                   ) : null}
                   <Button
                     type="button"
@@ -495,36 +519,25 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                     <Sparkles className="h-4 w-4" />
                     {generateAiDraft.isPending ? "Menyusun draft…" : aiProposal ? "Generate ulang" : "Generate draft"}
                   </Button>
-                  {generateAiDraft.isError ? (
-                    <p className="text-sm text-destructive">Draft AI gagal dibuat. Periksa deskripsi lalu coba lagi.</p>
-                  ) : null}
+                  {generateAiDraft.isError ? <p className="text-sm text-destructive">Draft AI gagal dibuat. Periksa deskripsi lalu coba lagi.</p> : null}
                   {aiProposal ? (
                     <div className="rounded-xl border border-border bg-muted/30 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-foreground">{aiProposal.suggestedTitle}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {aiProposal.actors.length} pelaksana · {aiProposal.steps.length} langkah. Tinjau sebelum membuat draft.
-                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">{aiProposal.actors.length} pelaksana · {aiProposal.steps.length} langkah. Tinjau sebelum membuat draft.</p>
                         </div>
-                        <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                          Preview AI
-                        </span>
+                        <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">Preview AI</span>
                       </div>
                       <ol className="mt-4 space-y-2">
                         {aiProposal.steps.slice(0, 6).map((step) => (
                           <li key={step.urutan} className="flex gap-3 text-sm">
                             <span className="font-semibold text-muted-foreground">{step.urutan}.</span>
-                            <span className="text-foreground">
-                              {step.kegiatan}
-                              <span className="ml-2 text-muted-foreground">· {step.actorName}</span>
-                            </span>
+                            <span className="text-foreground">{step.kegiatan}<span className="ml-2 text-muted-foreground">· {step.actorName}</span></span>
                           </li>
                         ))}
                       </ol>
-                      {aiProposal.steps.length > 6 ? (
-                        <p className="mt-2 text-xs text-muted-foreground">+{aiProposal.steps.length - 6} langkah lainnya</p>
-                      ) : null}
+                      {aiProposal.steps.length > 6 ? <p className="mt-2 text-xs text-muted-foreground">+{aiProposal.steps.length - 6} langkah lainnya</p> : null}
                     </div>
                   ) : null}
                 </div>
@@ -542,9 +555,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                     >
                       <option value="">Pilih template</option>
                       {templateItems.map((template) => (
-                        <option key={template.templateId} value={template.templateId}>
-                          {template.name}
-                        </option>
+                        <option key={template.templateId} value={template.templateId}>{template.name}</option>
                       ))}
                     </select>
                   </label>
@@ -552,9 +563,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                     <div className="rounded-xl border border-border bg-muted/30 p-4">
                       <p className="font-medium text-foreground">{preview.template.name}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{preview.template.description}</p>
-                      <p className="mt-3 text-sm text-foreground">
-                        {preview.stepCount} langkah · {preview.actorsToReuse.length + preview.actorsToCreate.length} pelaksana
-                      </p>
+                      <p className="mt-3 text-sm text-foreground">{preview.stepCount} langkah · {preview.actorsToReuse.length + preview.actorsToCreate.length} pelaksana</p>
                     </div>
                   ) : null}
                   {templatePreview.isError ? <p className="text-sm text-destructive">Preview template gagal dimuat.</p> : null}
@@ -599,9 +608,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
               {createSop.isError ? <p className="text-sm text-destructive">Gagal membuat SOP.</p> : null}
 
               <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between">
-                <Button type="button" variant="ghost" onClick={() => setCreateSource(null)}>
-                  ← Kembali
-                </Button>
+                <Button type="button" variant="ghost" onClick={() => setCreateSource(null)}>← Kembali</Button>
                 <Button type="submit" disabled={!canCreate || createSop.isPending} className="gap-2">
                   <Plus className="h-4 w-4" />
                   {createSop.isPending ? "Membuat draft…" : "Buat dan lanjutkan"}

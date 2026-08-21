@@ -24,7 +24,7 @@ ENV NODE_ENV=production
 RUN apk add --no-cache wget \
   && corepack enable \
   && corepack prepare pnpm@10.28.2 --activate \
-  && mkdir -p /app/storage/sop-pdf \
+  && mkdir -p /app/storage/sop-pdf /app/scripts \
   && chown -R node:node /app
 
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
@@ -35,7 +35,11 @@ COPY --from=builder --chown=node:node /app/src/generated/prisma ./dist/src/gener
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=node:node /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/scripts/production-entrypoint.sh ./scripts/production-entrypoint.sh
+
+RUN chmod 755 /app/scripts/production-entrypoint.sh
 
 USER node
 EXPOSE 3001
+ENTRYPOINT ["/app/scripts/production-entrypoint.sh"]
 CMD ["pnpm", "start:prod"]

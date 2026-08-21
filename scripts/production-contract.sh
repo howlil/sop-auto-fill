@@ -11,6 +11,50 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f compose.yml)
 [[ -f "$ENV_FILE" ]] || { echo "$ENV_FILE missing" >&2; exit 1; }
 [[ -f server/prisma/seed-runtime.cjs ]] || { echo "production template seed runner missing" >&2; exit 1; }
 [[ -f server/prisma/system-template-seed.cjs ]] || { echo "system template seed module missing" >&2; exit 1; }
+[[ -f server/scripts/production-entrypoint.sh ]] || { echo "production backend entrypoint missing" >&2; exit 1; }
+sh -n server/scripts/production-entrypoint.sh
+
+grep -q 'prisma migrate deploy' server/scripts/production-entrypoint.sh || {
+  echo "production entrypoint must deploy Prisma migrations" >&2
+  exit 1
+}
+grep -q 'seed-runtime.cjs' server/scripts/production-entrypoint.sh || {
+  echo "production entrypoint must seed system templates" >&2
+  exit 1
+}
+grep -q 'production-entrypoint.sh' server/Dockerfile || {
+  echo "backend runtime must copy production entrypoint" >&2
+  exit 1
+}
+grep -q 'chmod 755 /app/scripts/production-entrypoint.sh' server/Dockerfile || {
+  echo "backend runtime must make production entrypoint executable" >&2
+  exit 1
+}
+grep -q 'ENTRYPOINT \["/app/scripts/production-entrypoint.sh"\]' server/Dockerfile || {
+  echo "backend runtime must execute production entrypoint" >&2
+  exit 1
+}
+
+grep -q '^  promote-production:' .github/workflows/ci.yml || {
+  echo "CI production promotion job missing" >&2
+  exit 1
+}
+grep -q 'needs: \[server, client, e2e, production-compose\]' .github/workflows/ci.yml || {
+  echo "production promotion must depend on every mandatory CI gate" >&2
+  exit 1
+}
+grep -q "github.event_name == 'push'" .github/workflows/ci.yml || {
+  echo "production promotion must be push-only" >&2
+  exit 1
+}
+grep -q "github.ref == 'refs/heads/master'" .github/workflows/ci.yml || {
+  echo "production promotion must be master-only" >&2
+  exit 1
+}
+grep -q 'refs/heads/production' .github/workflows/ci.yml || {
+  echo "production promotion must target refs/heads/production" >&2
+  exit 1
+}
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
