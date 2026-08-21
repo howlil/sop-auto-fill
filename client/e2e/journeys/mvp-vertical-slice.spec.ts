@@ -101,7 +101,7 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
   await page.getByRole('button', { name: 'Mulai kosong' }).click()
   await page.getByLabel('Judul SOP').fill(initialTitle)
   await page.getByLabel('Nomor SOP').fill(`E2E-001-${testInfo.retry}`)
@@ -206,7 +206,7 @@ test('system template creates a normal draft and preserves the existing lifecycl
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
   await page.getByRole('button', { name: 'Gunakan template' }).click()
   const templateSelect = page.getByLabel('Template sistem')
   await expect(templateSelect.getByRole('option', { name: 'Pelayanan' })).toHaveCount(1)
