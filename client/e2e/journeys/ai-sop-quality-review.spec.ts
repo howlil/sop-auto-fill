@@ -45,7 +45,7 @@ test('AI quality review uses saved draft state, stays advisory, clears after edi
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
   await page.getByRole('button', { name: 'Buat dengan AI' }).click()
   await page.getByLabel('Apa proses yang ingin Anda dokumentasikan?').fill(
     'Petugas menerima permohonan, verifikator memeriksa kelengkapan, dokumen yang tidak lengkap dikembalikan, dan hasil diserahkan setelah lengkap.',
