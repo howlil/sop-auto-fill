@@ -42,7 +42,7 @@ test('AI-assisted revision previews, applies through autosave, cancels without w
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
   await page.getByRole('button', { name: 'Mulai kosong' }).click()
   await page.getByLabel('Judul SOP').fill(title)
   await page.getByLabel('Nomor SOP').fill(`E2E-REVISION-001-${testInfo.retry}`)
