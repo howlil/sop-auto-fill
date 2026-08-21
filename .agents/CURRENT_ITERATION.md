@@ -1,44 +1,35 @@
 # Current Iteration
 
-- **Iteration:** `none`
-- **Status:** `IDLE`
-- **Working branch:** `none`
+- **Iteration:** `8`
+- **Name:** `workspace-production-workbench`
+- **Status:** `DESIGN_REVIEW`
+- **Working branch:** `feat/workspace-production-workbench`
 - **Pull request:** `none`
-- **Goal:** tidak ada product iteration aktif. Iteration berikutnya hanya dimulai setelah instruksi user eksplisit.
+- **Goal:** redesign workspace menjadi multi-SOP workbench yang compact dan non-wizard, mempertahankan core SOP editor, serta menyiapkan deployment production melalui nabilrn/MyPaas dengan CI/CD yang aman.
+
+## Scope Lock
+
+### Product
+- Redesign halaman workspace mengikuti approved information architecture.
+- Sidebar hanya merepresentasikan navigation/resource hierarchy, bukan wizard state.
+- Workspace menampilkan statistik, SOP catalog, search/filter, dan entry point `+ Buat SOP`.
+- Creation flow tetap mendukung AI, template, dan blank tetapi tidak persisten sebagai panel wizard di dashboard.
+- `Review & Complete` tidak menjadi navigation workspace.
+- Core SOP editor di `client/src/pages/penyusun/sop/detail/**` tidak diubah kecuali diperlukan adapter yang tidak mengubah editing behavior; perubahan seperti itu harus dievaluasi ulang sebelum implementasi.
+
+### Delivery
+- Target platform: `nabilrn/MyPaas`.
+- Source deployment: Git repository `howlil/sop-auto-fill`.
+- Preferred mode: Docker Compose menggunakan production stack yang ada.
+- CI tetap menjadi quality gate sebelum production deployment.
+- Deployment tidak boleh mem-bypass server/client/E2E/production-compose checks.
+- Secrets dan production environment tetap berada di runtime/deployment configuration, bukan di source control.
+- Persistent MySQL dan SOP PDF data harus tetap menggunakan named volumes.
 
 ## Last Completed Iteration
 
 Iteration 7 `product-workflow-redesign` sudah squash-merged ke `master` melalui PR #9 sebagai `474c5a317c817560c3923a8fd5e726da9084e501`.
 
-### Delivered Product Flow
-
-```text
-LOGIN
-  -> WORKSPACES
-  -> WORKSPACE
-       -> search / browse SOP
-       -> + Buat SOP
-            -> Dengan AI | Template | Kosong
-            -> guided SOP editor
-                 -> 1 Informasi Dasar
-                 -> 2 Pelaksana
-                 -> 3 Prosedur
-                 -> 4 Informasi Pendukung
-                 -> 5 Review
-            -> Preview: Dokumen | Flowchart | BPMN
-            -> Review & Complete
-            -> COMPLETED
-                 -> PDF / Create New Version
-```
-
-### Verification
-
-CI #382 untuk head final Iteration 7 lulus penuh:
-- server: success
-- client: success
-- e2e: success (5/5 journeys)
-- production-compose: success
-
 ## Execution Lock
 
-Jangan memulai iteration product berikutnya secara otomatis. Update file ini terlebih dahulu hanya setelah ada instruksi user eksplisit untuk iteration baru.
+Iteration 8 hanya boleh dikerjakan pada `feat/workspace-production-workbench`. Implementasi dimulai setelah design spec Iteration 8 direview dan disetujui user sesuai workflow Superpowers.
