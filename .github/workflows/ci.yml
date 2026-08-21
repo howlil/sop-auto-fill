@@ -194,13 +194,13 @@ jobs:
 
       - name: Deploy migrations twice
         run: |
-          docker compose --env-file .env.production.ci run --rm backend pnpm prisma migrate deploy
-          docker compose --env-file .env.production.ci run --rm backend pnpm prisma migrate deploy
+          docker compose --env-file .env.production.ci run --rm --entrypoint pnpm backend prisma migrate deploy
+          docker compose --env-file .env.production.ci run --rm --entrypoint pnpm backend prisma migrate deploy
 
       - name: Seed system templates twice and verify exact state
         run: |
-          docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
-          docker compose --env-file .env.production.ci run --rm backend node prisma/seed-runtime.cjs
+          docker compose --env-file .env.production.ci run --rm --entrypoint node backend prisma/seed-runtime.cjs
+          docker compose --env-file .env.production.ci run --rm --entrypoint node backend prisma/seed-runtime.cjs
           docker compose --env-file .env.production.ci exec -T mysql \
             mysql -N -usop -psop-ci-password sop_prod_ci \
             -e "SELECT COUNT(*) FROM SopTemplate" | grep -qx '3'
@@ -285,3 +285,27 @@ jobs:
         run: |
           docker compose --env-file .env.production.ci down -v --remove-orphans || true
           rm -rf .env.production.ci backups-ci .production-backup-path
+
+  promote-production:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    needs: [server, client, e2e, production-compose]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Promote validated commit to production
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin production || true
+          if git show-ref --verify --quiet refs/remotes/origin/production; then
+            production_sha="$(git rev-parse refs/remotes/origin/production)"
+            if ! git merge-base --is-ancestor "$production_sha" "$GITHUB_SHA"; then
+              echo "production branch diverged from validated master history" >&2
+              exit 1
+            fi
+          fi
+          git push origin "$GITHUB_SHA:refs/heads/production"
