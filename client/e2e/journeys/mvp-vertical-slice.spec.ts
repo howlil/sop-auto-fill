@@ -11,6 +11,23 @@ function visibleProcedureField(page: Page, label: string) {
   return page.locator(`[aria-label="${label}"]:visible`)
 }
 
+async function openEditorSection(page: Page, section: string): Promise<void> {
+  await page.getByRole('button', { name: new RegExp(section) }).click()
+}
+
+async function openPreview(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Preview' }).click()
+  await expect(page.getByText('Dokumen dan diagram', { exact: true })).toBeVisible()
+}
+
+async function completeCurrentVersion(page: Page, version: number): Promise<void> {
+  await page.getByRole('button', { name: 'Review & Complete' }).click()
+  const completeButton = page.getByRole('button', { name: `Complete versi ${version}` }).first()
+  await expect(completeButton).toBeEnabled({ timeout: 20_000 })
+  await completeButton.click()
+  await page.getByRole('dialog').getByRole('button', { name: `Complete versi ${version}` }).click()
+}
+
 async function installPdfPrintHarness(page: Page): Promise<void> {
   await page.evaluate(() => {
     type PdfEvidenceWindow = Window & {
@@ -84,28 +101,24 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByPlaceholder('Nama pelaksana').fill(actorName)
-  await page.getByRole('button', { name: 'Tambah Pelaksana' }).click()
-  await expect(page.getByLabel('Daftar pelaksana workspace').getByText(actorName, { exact: true })).toBeVisible()
-
-  await page.getByPlaceholder('Judul SOP').fill(initialTitle)
-  await page.getByPlaceholder('Nomor SOP').fill(`E2E-001-${testInfo.retry}`)
-  await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
+  await page.getByRole('button', { name: 'Mulai kosong' }).click()
+  await page.getByLabel('Judul SOP').fill(initialTitle)
+  await page.getByLabel('Nomor SOP').fill(`E2E-001-${testInfo.retry}`)
+  await page.getByRole('button', { name: 'Buat dan lanjutkan' }).click()
   await waitForAppHydration(page)
 
-  await expect(page.getByText('Dokumen SOP', { exact: true })).toBeVisible()
-  const titleInput = page.getByPlaceholder('Judul SOP')
+  await expect(page.getByRole('heading', { name: 'Informasi Dasar' })).toBeVisible()
+  const titleInput = page.getByLabel('Judul SOP')
   await titleInput.fill(updatedTitle)
 
-  await page.getByRole('button', { name: 'Tambah aktor pelaksana' }).click()
-  const actorCheckbox = page.getByRole('checkbox', { name: actorName })
-  await page.getByText(actorName, { exact: true }).click()
-  await expect(actorCheckbox).toBeChecked()
-  await page.getByRole('button', { name: 'Tambahkan' }).click()
-  await expect(page.getByText(actorName)).toBeVisible()
+  await openEditorSection(page, '2. Pelaksana')
+  await page.getByPlaceholder('Contoh: Evaluator, Admin OPD, Kepala Bagian').fill(actorName)
+  await page.getByRole('button', { name: 'Tambah', exact: true }).click()
+  await expect(page.getByText(actorName, { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Langkah' }).click()
-  const addStep = page.getByRole('button', { name: 'Tambah langkah' })
+  await openEditorSection(page, '3. Prosedur')
+  const addStep = page.getByRole('button', { name: /Tambah langkah/ })
   await addStep.click()
   await addStep.click()
   await addStep.click()
@@ -132,22 +145,20 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
 
   await page.reload()
   await waitForAppHydration(page)
-  await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
-  await page.getByRole('button', { name: 'Langkah' }).click()
+  await expect(page.getByLabel('Judul SOP')).toHaveValue(updatedTitle)
+  await openEditorSection(page, '3. Prosedur')
   await expect(visibleProcedureField(page, 'Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
   await expect(visibleProcedureField(page, 'Kelengkapan').nth(1)).toHaveValue('Dokumen input')
-  await page.getByRole('button', { name: 'Selesai edit' }).click()
 
+  await openPreview(page)
   await expect(page.getByRole('tab', { name: 'Flowchart' })).toBeVisible()
   await page.getByRole('tab', { name: 'BPMN' }).click()
   await expect(page.locator('.sop-print-diagram-bpmn')).toBeVisible({ timeout: 20_000 })
   await page.getByRole('tab', { name: 'Flowchart' }).click()
   await expect(page.locator('.sop-print-diagram-flowchart')).toBeVisible({ timeout: 20_000 })
 
-  // Prove the application builds a non-empty PDF Blob while neutralizing Chrome's native
-  // PDF viewer/print lifecycle, which is outside application behavior and unstable in hosted CI.
   await installPdfPrintHarness(page)
-  await page.getByRole('button', { name: 'Cetak PDF' }).click()
+  await page.getByRole('button', { name: 'PDF' }).click()
   await expectPdfBlobGenerated(page)
   await page.locator('iframe[src="about:blank#e2e-pdf"]').waitFor({
     state: 'attached',
@@ -155,38 +166,33 @@ test('MVP workspace SOP survives reload and versions a completed SOP', async ({ 
   })
   await expect(page.getByText('Gagal menyiapkan PDF. Coba muat ulang halaman.')).toHaveCount(0)
 
-  // The native print completion event is a browser/OS concern. Continue the persisted SOP
-  // lifecycle in a fresh page that shares the same authenticated browser context.
   const editorUrlAfterPdf = page.url()
   const continuationPage = await page.context().newPage()
   await continuationPage.goto(editorUrlAfterPdf)
   await waitForAppHydration(continuationPage)
-  await expect(continuationPage.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
+  await expect(continuationPage.getByLabel('Judul SOP')).toHaveValue(updatedTitle)
   await page.close()
 
-  await continuationPage.getByRole('button', { name: 'Selesai' }).click()
-  await continuationPage.getByRole('button', { name: 'Ya, selesai' }).click()
-  await expect(continuationPage.getByRole('button', { name: 'Buat versi baru' })).toBeVisible({
+  await completeCurrentVersion(continuationPage, 1)
+  await expect(continuationPage.getByRole('button', { name: 'Buat versi baru' }).first()).toBeVisible({
     timeout: 20_000,
   })
-  await expect(continuationPage.getByPlaceholder('Judul SOP')).toHaveCount(0)
+  await expect(continuationPage.getByText('Versi ini sudah selesai dan dikunci')).toBeVisible()
 
   const completedUrl = continuationPage.url()
-  await continuationPage.getByRole('button', { name: 'Buat versi baru' }).click()
+  await continuationPage.getByRole('button', { name: 'Buat versi baru' }).first().click()
   await expect.poll(() => continuationPage.url(), { timeout: 20_000 }).not.toBe(completedUrl)
   await waitForAppHydration(continuationPage)
-  await expect(continuationPage.getByPlaceholder('Judul SOP')).toHaveValue(updatedTitle)
-  await continuationPage.getByRole('button', { name: 'Langkah' }).click()
+  await expect(continuationPage.getByLabel('Judul SOP')).toHaveValue(updatedTitle)
+  await openEditorSection(continuationPage, '3. Prosedur')
   await expect(visibleProcedureField(continuationPage, 'Kegiatan').nth(1)).toHaveValue('Verifikasi dokumen')
   await expect(visibleProcedureField(continuationPage, 'Kelengkapan').nth(1)).toHaveValue('Dokumen input')
-  await continuationPage.getByRole('button', { name: 'Selesai edit' }).click()
   await expect(continuationPage.getByText('v2', { exact: true })).toBeVisible()
-  await expect(continuationPage.getByRole('button', { name: 'Selesai' })).toBeVisible()
+  await expect(continuationPage.getByRole('button', { name: 'Review & Complete' })).toBeVisible()
 })
 
 test('system template creates a normal draft and preserves the existing lifecycle', async ({ page }, testInfo) => {
   const workspaceName = `E2E Template Workspace ${testInfo.retry}`
-  const reusedActor = 'Petugas Layanan'
   const title = `SOP Pelayanan Template E2E ${testInfo.retry}`
   const updatedActivity = 'Memproses permohonan layanan terverifikasi'
 
@@ -200,35 +206,35 @@ test('system template creates a normal draft and preserves the existing lifecycl
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByPlaceholder('Nama pelaksana').fill(reusedActor)
-  await page.getByRole('button', { name: 'Tambah Pelaksana' }).click()
-  await expect(page.getByLabel('Daftar pelaksana workspace').getByText(reusedActor, { exact: true })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Dari Template' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
+  await page.getByRole('button', { name: 'Gunakan template' }).click()
   const templateSelect = page.getByLabel('Template sistem')
   await expect(templateSelect.getByRole('option', { name: 'Pelayanan' })).toHaveCount(1)
   await templateSelect.selectOption({ label: 'Pelayanan' })
 
-  const reusedActorsPreview = page.getByText('Aktor dipakai ulang', { exact: true }).locator('..')
-  const newActorsPreview = page.getByText('Aktor baru', { exact: true }).locator('..')
-  await expect(reusedActorsPreview).toContainText(reusedActor)
-  await expect(newActorsPreview).toContainText('Pelaksana Layanan')
-  await expect(newActorsPreview).toContainText('Penanggung Jawab Layanan')
-  await expect(page.getByText('5 langkah', { exact: true })).toBeVisible()
+  await expect(page.getByText(/5 langkah/)).toBeVisible()
+  await expect(page.getByText(/pelaksana/)).toBeVisible()
 
-  await page.getByPlaceholder('Judul SOP').fill(title)
-  await page.getByPlaceholder('Nomor SOP').fill(`E2E-TPL-001-${testInfo.retry}`)
-  await page.getByPlaceholder('Nama lembaga').fill('Unit Pelayanan E2E')
-  await page.getByRole('button', { name: 'Buat dari Template' }).click()
+  await page.getByLabel('Judul SOP').fill(title)
+  await page.getByLabel('Nomor SOP').fill(`E2E-TPL-001-${testInfo.retry}`)
+  await page.getByLabel('Nama lembaga').fill('Unit Pelayanan E2E')
+  await page.getByRole('button', { name: 'Buat dan lanjutkan' }).click()
   await waitForAppHydration(page)
 
-  await expect(page.getByText('Dokumen SOP', { exact: true })).toBeVisible()
-  await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(title)
-  await expect(page.getByPlaceholder('Peringatan 1')).toHaveValue(
+  await expect(page.getByRole('heading', { name: 'Informasi Dasar' })).toBeVisible()
+  await expect(page.getByLabel('Judul SOP')).toHaveValue(title)
+
+  await openEditorSection(page, '2. Pelaksana')
+  await expect(page.getByText('Petugas Layanan', { exact: true })).toBeVisible()
+  await expect(page.getByText('Pelaksana Layanan', { exact: true })).toBeVisible()
+  await expect(page.getByText('Penanggung Jawab Layanan', { exact: true })).toBeVisible()
+
+  await openEditorSection(page, '4. Informasi Pendukung')
+  await expect(page.getByPlaceholder('Tuliskan peringatan').first()).toHaveValue(
     'Jangan memproses permohonan yang persyaratannya belum lengkap.',
   )
 
-  await page.getByRole('button', { name: 'Langkah' }).click()
+  await openEditorSection(page, '3. Prosedur')
   const activities = visibleProcedureField(page, 'Kegiatan')
   await expect(activities).toHaveCount(5)
   await expect(activities.nth(1)).toHaveValue('Memeriksa kelengkapan persyaratan')
@@ -239,26 +245,24 @@ test('system template creates a normal draft and preserves the existing lifecycl
 
   await page.reload()
   await waitForAppHydration(page)
-  await page.getByRole('button', { name: 'Langkah' }).click()
+  await openEditorSection(page, '3. Prosedur')
   await expect(visibleProcedureField(page, 'Kegiatan').nth(2)).toHaveValue(updatedActivity)
-  await page.getByRole('button', { name: 'Selesai edit' }).click()
 
+  await openPreview(page)
   await page.getByRole('tab', { name: 'BPMN' }).click()
   await expect(page.locator('.sop-print-diagram-bpmn')).toBeVisible({ timeout: 20_000 })
   await page.getByRole('tab', { name: 'Flowchart' }).click()
   await expect(page.locator('.sop-print-diagram-flowchart')).toBeVisible({ timeout: 20_000 })
 
-  await page.getByRole('button', { name: 'Selesai' }).click()
-  await page.getByRole('button', { name: 'Ya, selesai' }).click()
-  await expect(page.getByRole('button', { name: 'Buat versi baru' })).toBeVisible({ timeout: 20_000 })
+  await completeCurrentVersion(page, 1)
+  await expect(page.getByRole('button', { name: 'Buat versi baru' }).first()).toBeVisible({ timeout: 20_000 })
 
   const completedUrl = page.url()
-  await page.getByRole('button', { name: 'Buat versi baru' }).click()
+  await page.getByRole('button', { name: 'Buat versi baru' }).first().click()
   await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(completedUrl)
   await waitForAppHydration(page)
-  await expect(page.getByPlaceholder('Judul SOP')).toHaveValue(title)
-  await page.getByRole('button', { name: 'Langkah' }).click()
+  await expect(page.getByLabel('Judul SOP')).toHaveValue(title)
+  await openEditorSection(page, '3. Prosedur')
   await expect(visibleProcedureField(page, 'Kegiatan').nth(2)).toHaveValue(updatedActivity)
-  await page.getByRole('button', { name: 'Selesai edit' }).click()
   await expect(page.getByText('v2', { exact: true })).toBeVisible()
 })

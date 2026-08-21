@@ -1,24 +1,95 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Plus, Sparkles, Users } from "lucide-react";
-import { pelaksanaApi } from "@/api/pelaksana";
+import {
+  ArrowLeft,
+  FilePlus2,
+  FileText,
+  LayoutTemplate,
+  Plus,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { workspaceApi } from "@/api/workspaces";
-import { workspaceSopApi, type AiDraftProposal } from "@/api/workspace-sops";
+import {
+  workspaceSopApi,
+  type AiDraftProposal,
+  type WorkspaceSopRow,
+} from "@/api/workspace-sops";
 import { queryClient } from "@/config/query-client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/utils/cn";
 
 type CreateSource = "blank" | "template" | "ai";
+type StatusFilter = "ALL" | WorkspaceSopRow["status"];
+
+const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "ALL", label: "Semua" },
+  { value: "DRAFT", label: "Draft" },
+  { value: "COMPLETED", label: "Selesai" },
+  { value: "ARCHIVED", label: "Arsip" },
+];
+
+const CREATE_OPTIONS: Array<{
+  id: CreateSource;
+  title: string;
+  description: string;
+  badge?: string;
+  Icon: typeof Sparkles;
+}> = [
+  {
+    id: "ai",
+    title: "Buat dengan AI",
+    description: "Ceritakan prosesnya, lalu tinjau draft terstruktur sebelum dibuat.",
+    badge: "Direkomendasikan",
+    Icon: Sparkles,
+  },
+  {
+    id: "template",
+    title: "Gunakan template",
+    description: "Mulai dari struktur SOP sistem yang sudah memiliki langkah awal.",
+    Icon: LayoutTemplate,
+  },
+  {
+    id: "blank",
+    title: "Mulai kosong",
+    description: "Buat dokumen baru dan susun seluruh isinya sendiri.",
+    Icon: FilePlus2,
+  },
+];
+
+function formatUpdatedAt(value: string | null): string {
+  if (!value) return "Belum ada aktivitas";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
 
 export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
-  const [createSource, setCreateSource] = useState<CreateSource>("blank");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createSource, setCreateSource] = useState<CreateSource | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [judul, setJudul] = useState("");
   const [nomorSop, setNomorSop] = useState("");
   const [namaLembaga, setNamaLembaga] = useState("");
-  const [namaPelaksana, setNamaPelaksana] = useState("");
   const [deskripsiProses, setDeskripsiProses] = useState("");
   const [tujuanProses, setTujuanProses] = useState("");
   const [catatanTambahan, setCatatanTambahan] = useState("");
   const [aiProposal, setAiProposal] = useState<AiDraftProposal | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 
   const workspace = useQuery({
     queryKey: ["workspace", workspaceId],
@@ -28,32 +99,23 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
     queryKey: ["workspace-sops", workspaceId],
     queryFn: () => workspaceSopApi.list(workspaceId),
   });
-  const pelaksana = useQuery({
-    queryKey: ["workspace-pelaksana", workspaceId],
-    queryFn: () => pelaksanaApi.list(workspaceId),
-  });
   const templates = useQuery({
     queryKey: ["sop-templates"],
     queryFn: () => workspaceSopApi.listTemplates(),
-    enabled: createSource === "template",
+    enabled: isCreateOpen && createSource === "template",
   });
   const templatePreview = useQuery({
     queryKey: ["sop-template-preview", selectedTemplateId, workspaceId],
     queryFn: () => workspaceSopApi.previewTemplate(selectedTemplateId, workspaceId),
-    enabled: createSource === "template" && selectedTemplateId.length > 0,
+    enabled:
+      isCreateOpen &&
+      createSource === "template" &&
+      selectedTemplateId.length > 0,
   });
   const aiAvailability = useQuery({
     queryKey: ["sop-ai-draft-availability"],
     queryFn: () => workspaceSopApi.aiDraftAvailability(),
-    enabled: createSource === "ai",
-  });
-
-  const createPelaksana = useMutation({
-    mutationFn: () => pelaksanaApi.create(workspaceId, namaPelaksana.trim()),
-    onSuccess: async () => {
-      setNamaPelaksana("");
-      await queryClient.invalidateQueries({ queryKey: ["workspace-pelaksana", workspaceId] });
-    },
+    enabled: isCreateOpen && createSource === "ai",
   });
 
   const generateAiDraft = useMutation({
@@ -98,60 +160,34 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
       });
     },
     onSuccess: async (response) => {
-      setJudul("");
-      setNomorSop("");
-      setNamaLembaga("");
-      setAiProposal(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workspace-sops", workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["workspace-pelaksana", workspaceId] }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: ["workspace-sops", workspaceId] });
       const detailId = response.data.detailSopId;
       if (detailId) window.location.assign(`/workspaces/${workspaceId}/sops/${detailId}`);
     },
   });
 
-  const onPelaksanaSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!namaPelaksana.trim()) return;
-    void createPelaksana.mutateAsync();
-  };
-
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!judul.trim() || !nomorSop.trim()) return;
-    if (
-      createSource === "template" &&
-      (!selectedTemplateId || !namaLembaga.trim() || !templatePreview.isSuccess)
-    ) {
-      return;
-    }
-    if (createSource === "ai" && (!aiProposal || !namaLembaga.trim())) return;
-    void createSop.mutateAsync();
-  };
-
-  const onGenerateAiDraft = () => {
-    if (deskripsiProses.trim().length < 20 || aiAvailability.data?.data.enabled !== true) return;
-    void generateAiDraft.mutateAsync();
-  };
-
-  const invalidateAiProposal = () => {
-    setAiProposal(null);
-  };
-
-  const switchCreateSource = (source: CreateSource) => {
-    setCreateSource(source);
-    setSelectedTemplateId("");
-    setAiProposal(null);
-    if (source === "blank") setNamaLembaga("");
-  };
-
   const items = sops.data?.data ?? [];
-  const pelaksanaItems = pelaksana.data?.data ?? [];
   const templateItems = templates.data?.data ?? [];
   const preview = templatePreview.data?.data;
   const aiEnabled = aiAvailability.data?.data.enabled === true;
+
+  const visibleItems = useMemo(() => {
+    const needle = searchQuery.trim().toLocaleLowerCase("id-ID");
+    return items.filter((sop) => {
+      if (statusFilter !== "ALL" && sop.status !== statusFilter) return false;
+      if (!needle) return true;
+      return [sop.judul, sop.nomorSop ?? "", sop.statusLabel]
+        .join(" ")
+        .toLocaleLowerCase("id-ID")
+        .includes(needle);
+    });
+  }, [items, searchQuery, statusFilter]);
+
+  const draftCount = items.filter((item) => item.status === "DRAFT").length;
+  const completedCount = items.filter((item) => item.status === "COMPLETED").length;
+
   const canCreate =
+    createSource !== null &&
     judul.trim().length > 0 &&
     nomorSop.trim().length > 0 &&
     (createSource === "blank" ||
@@ -161,359 +197,420 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
         templatePreview.isSuccess) ||
       (createSource === "ai" && aiProposal !== null && namaLembaga.trim().length > 0));
 
+  const resetCreateState = () => {
+    setCreateSource(null);
+    setSelectedTemplateId("");
+    setJudul("");
+    setNomorSop("");
+    setNamaLembaga("");
+    setDeskripsiProses("");
+    setTujuanProses("");
+    setCatatanTambahan("");
+    setAiProposal(null);
+  };
+
+  const handleCreateOpenChange = (open: boolean) => {
+    setIsCreateOpen(open);
+    if (!open) resetCreateState();
+  };
+
+  const chooseSource = (source: CreateSource) => {
+    setCreateSource(source);
+    setSelectedTemplateId("");
+    setAiProposal(null);
+    setJudul("");
+    setNomorSop("");
+    setNamaLembaga("");
+  };
+
+  const invalidateAiProposal = () => setAiProposal(null);
+
+  const onGenerateAiDraft = () => {
+    if (deskripsiProses.trim().length < 20 || !aiEnabled) return;
+    void generateAiDraft.mutateAsync();
+  };
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!canCreate) return;
+    void createSop.mutateAsync();
+  };
+
   return (
     <main className="min-h-screen bg-surface-subtle">
       <header className="border-b border-border bg-background">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-4">
-          <a href="/workspaces" className="rounded-lg border border-border p-2 hover:bg-muted" aria-label="Kembali ke workspace">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-5 py-5 sm:px-6">
+          <a
+            href="/workspaces"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Kembali ke daftar workspace"
+          >
             <ArrowLeft className="h-4 w-4" />
           </a>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">{workspace.data?.data.name ?? "Workspace"}</h1>
-            <p className="text-sm text-muted-foreground">SOP dan pelaksana dalam project ini</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-semibold text-foreground">
+              {workspace.data?.data.name ?? "Workspace"}
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Kelola dan susun SOP dalam satu tempat.
+            </p>
           </div>
+          <Button
+            type="button"
+            className="h-10 gap-2 px-4"
+            onClick={() => setIsCreateOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Buat SOP
+          </Button>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 py-8">
-        <section className="mb-6 rounded-xl border border-border bg-background p-5" aria-labelledby="workspace-pelaksana-title">
-          <div className="mb-4 flex items-start gap-3">
-            <Users className="mt-0.5 h-5 w-5 text-muted-foreground" aria-hidden />
+      <section className="mx-auto max-w-6xl px-5 py-7 sm:px-6 sm:py-9">
+        <div className="mb-7 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border bg-background px-4 py-4">
+            <p className="text-sm text-muted-foreground">Total SOP</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{items.length}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-background px-4 py-4">
+            <p className="text-sm text-muted-foreground">Sedang dikerjakan</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{draftCount}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-background px-4 py-4">
+            <p className="text-sm text-muted-foreground">Selesai</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{completedCount}</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-background">
+          <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
             <div>
-              <h2 id="workspace-pelaksana-title" className="font-semibold text-foreground">Pelaksana workspace</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Buat aktor yang dapat dipakai pada langkah SOP di workspace ini.</p>
+              <h2 className="text-base font-semibold text-foreground">Dokumen SOP</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Cari dokumen yang sedang dikerjakan atau buka versi yang sudah selesai.
+              </p>
             </div>
-          </div>
-          <form onSubmit={onPelaksanaSubmit} className="flex flex-col gap-3 sm:flex-row">
-            <input
-              value={namaPelaksana}
-              onChange={(event) => setNamaPelaksana(event.target.value)}
-              placeholder="Nama pelaksana"
-              maxLength={255}
-              className="h-11 flex-1 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              disabled={createPelaksana.isPending || !namaPelaksana.trim()}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" /> Tambah Pelaksana
-            </button>
-          </form>
-          {createPelaksana.isError ? (
-            <p className="mt-3 text-sm text-destructive">Gagal menambahkan pelaksana.</p>
-          ) : null}
-          <div className="mt-4 flex flex-wrap gap-2" aria-label="Daftar pelaksana workspace">
-            {pelaksana.isLoading ? (
-              <p className="text-sm text-muted-foreground">Memuat pelaksana...</p>
-            ) : pelaksana.isError ? (
-              <p className="text-sm text-destructive">Gagal memuat pelaksana.</p>
-            ) : pelaksanaItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Belum ada pelaksana.</p>
-            ) : (
-              pelaksanaItems.map((item) => (
-                <span key={item.id} className="rounded-full border border-border bg-surface-subtle px-3 py-1.5 text-sm text-foreground">
-                  {item.namaPelaksana}
-                </span>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="mb-8 rounded-xl border border-border bg-background p-5" aria-labelledby="create-sop-title">
-          <div className="mb-4">
-            <h2 id="create-sop-title" className="font-semibold text-foreground">Buat SOP</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Mulai dari dokumen kosong, template sistem, atau draft terstruktur dari deskripsi proses.</p>
-          </div>
-
-          <div className="mb-5 inline-flex rounded-lg border border-border bg-surface-subtle p-1" role="group" aria-label="Sumber pembuatan SOP">
-            <button
-              type="button"
-              aria-pressed={createSource === "blank"}
-              onClick={() => switchCreateSource("blank")}
-              className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "blank" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              SOP Kosong
-            </button>
-            <button
-              type="button"
-              aria-pressed={createSource === "template"}
-              onClick={() => switchCreateSource("template")}
-              className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "template" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              Dari Template
-            </button>
-            <button
-              type="button"
-              aria-pressed={createSource === "ai"}
-              onClick={() => switchCreateSource("ai")}
-              className={`rounded-md px-4 py-2 text-sm font-medium ${createSource === "ai" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              Dengan AI
-            </button>
-          </div>
-
-          {createSource === "template" ? (
-            <div className="mb-5 space-y-4">
-              <label className="block text-sm font-medium text-foreground">
-                Template sistem
-                <select
-                  value={selectedTemplateId}
-                  onChange={(event) => setSelectedTemplateId(event.target.value)}
-                  disabled={templates.isLoading || templates.isError}
-                  className="mt-2 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Pilih template</option>
-                  {templateItems.map((template) => (
-                    <option key={template.templateId} value={template.templateId}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <label className="relative block min-w-0 sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Cari judul atau nomor SOP"
+                  className="h-10 pl-9"
+                  aria-label="Cari SOP"
+                />
               </label>
-
-              {templates.isLoading ? <p className="text-sm text-muted-foreground">Memuat template...</p> : null}
-              {templates.isError ? <p className="text-sm text-destructive">Gagal memuat template SOP.</p> : null}
-              {selectedTemplateId && templatePreview.isLoading ? (
-                <p className="text-sm text-muted-foreground">Menyiapkan preview template...</p>
-              ) : null}
-              {templatePreview.isError ? (
-                <p className="text-sm text-destructive">Gagal menyiapkan preview template.</p>
-              ) : null}
-
-              {preview ? (
-                <div className="rounded-lg border border-border bg-surface-subtle p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-foreground">{preview.template.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{preview.template.description}</p>
-                    </div>
-                    <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                      {preview.stepCount} langkah
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor dipakai ulang</p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {preview.actorsToReuse.length > 0
-                          ? preview.actorsToReuse.map((actor) => actor.name).join(", ")
-                          : "Tidak ada"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor baru</p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {preview.actorsToCreate.length > 0 ? preview.actorsToCreate.join(", ") : "Tidak ada"}
-                      </p>
-                    </div>
-                  </div>
-                  {Object.keys(preview.lampiranDefaults).length > 0 ? (
-                    <p className="mt-4 text-xs text-muted-foreground">Template juga mengisi lampiran awal yang masih dapat diedit di editor.</p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {createSource === "ai" ? (
-            <div className="mb-5 space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block text-sm font-medium text-foreground md:col-span-2">
-                  Deskripsi proses
-                  <textarea
-                    value={deskripsiProses}
-                    onChange={(event) => {
-                      setDeskripsiProses(event.target.value);
-                      invalidateAiProposal();
-                    }}
-                    placeholder="Jelaskan siapa yang terlibat, aktivitas utama, keputusan, input, dan hasil proses."
-                    maxLength={8000}
-                    rows={5}
-                    className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-foreground">
-                  Tujuan proses (opsional)
-                  <textarea
-                    value={tujuanProses}
-                    onChange={(event) => {
-                      setTujuanProses(event.target.value);
-                      invalidateAiProposal();
-                    }}
-                    maxLength={2000}
-                    rows={3}
-                    className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-foreground">
-                  Catatan tambahan (opsional)
-                  <textarea
-                    value={catatanTambahan}
-                    onChange={(event) => {
-                      setCatatanTambahan(event.target.value);
-                      invalidateAiProposal();
-                    }}
-                    maxLength={2000}
-                    rows={3}
-                    className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-              </div>
-
-              {aiAvailability.isLoading ? (
-                <p className="text-sm text-muted-foreground">Memeriksa ketersediaan AI drafting...</p>
-              ) : null}
-              {aiAvailability.isError ? (
-                <p className="text-sm text-destructive">Status AI drafting tidak dapat diperiksa.</p>
-              ) : null}
-              {aiAvailability.isSuccess && !aiEnabled ? (
-                <p className="text-sm text-muted-foreground">AI drafting belum diaktifkan pada server. SOP kosong dan template tetap dapat digunakan.</p>
-              ) : null}
-
-              <button
-                type="button"
-                onClick={onGenerateAiDraft}
-                disabled={!aiEnabled || generateAiDraft.isPending || deskripsiProses.trim().length < 20}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                aria-label="Filter status SOP"
               >
-                <Sparkles className="h-4 w-4" />
-                {generateAiDraft.isPending ? "Generating..." : "Generate Draft"}
-              </button>
-              {generateAiDraft.isError ? (
-                <p className="text-sm text-destructive">Draft AI gagal dibuat. Periksa deskripsi lalu coba lagi.</p>
-              ) : null}
-
-              {aiProposal ? (
-                <div className="space-y-4 rounded-lg border border-border bg-surface-subtle p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-foreground">{aiProposal.suggestedTitle}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">Konten ini dihasilkan AI dan harus ditinjau sebelum digunakan.</p>
-                    </div>
-                    <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                      {aiProposal.steps.length} langkah
-                    </span>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor dipakai ulang</p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {aiProposal.actorsToReuse.length > 0
-                          ? aiProposal.actorsToReuse.map((actor) => actor.name).join(", ")
-                          : "Tidak ada"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aktor baru</p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {aiProposal.actorsToCreate.length > 0 ? aiProposal.actorsToCreate.join(", ") : "Tidak ada"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preview langkah</p>
-                    <ol className="mt-2 space-y-2">
-                      {aiProposal.steps.map((step) => (
-                        <li key={step.urutan} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
-                          <span className="font-medium">{step.urutan}. {step.kegiatan}</span>
-                          <span className="ml-2 text-muted-foreground">{step.actorName}</span>
-                          {step.jenis === "KEPUTUSAN" ? (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              Ya → {step.targetYaUrutan ?? "-"}, Tidak → {step.targetTidakUrutan ?? "-"}
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    Lampiran awal: {aiProposal.peringatan.length} peringatan, {aiProposal.kualifikasiPelaksanaan.length} kualifikasi, {aiProposal.peralatanPerlengkapan.length} peralatan, {aiProposal.pencatatanPendataan.length} pencatatan.
-                  </p>
-                </div>
-              ) : null}
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : null}
-
-          <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
-            <input
-              value={judul}
-              onChange={(event) => setJudul(event.target.value)}
-              placeholder="Judul SOP"
-              maxLength={500}
-              className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              value={nomorSop}
-              onChange={(event) => setNomorSop(event.target.value)}
-              placeholder="Nomor SOP"
-              maxLength={255}
-              className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {createSource === "template" || createSource === "ai" ? (
-              <input
-                value={namaLembaga}
-                onChange={(event) => setNamaLembaga(event.target.value)}
-                placeholder="Nama lembaga"
-                maxLength={500}
-                className="h-11 rounded-lg border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500 md:col-span-2"
-              />
-            ) : null}
-            <div className="flex items-center gap-3 md:col-span-2">
-              <button
-                type="submit"
-                disabled={createSop.isPending || !canCreate}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" />
-                {createSource === "template"
-                  ? "Buat dari Template"
-                  : createSource === "ai"
-                    ? "Buat Draft SOP"
-                    : "Buat SOP"}
-              </button>
-              {createSop.isError ? <p className="text-sm text-destructive">Gagal membuat SOP.</p> : null}
-            </div>
-          </form>
-        </section>
-
-        {sops.isLoading ? (
-          <p className="text-sm text-muted-foreground">Memuat SOP...</p>
-        ) : sops.isError ? (
-          <p className="text-sm text-destructive">Gagal memuat SOP.</p>
-        ) : items.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-background p-10 text-center">
-            <FileText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-            <p className="font-medium text-foreground">Belum ada SOP</p>
-            <p className="mt-1 text-sm text-muted-foreground">Buat SOP pertama pada workspace ini.</p>
           </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-background">
+
+          {sops.isLoading ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">Memuat SOP...</div>
+          ) : sops.isError ? (
+            <div className="p-8 text-center text-sm text-destructive">Gagal memuat SOP.</div>
+          ) : visibleItems.length === 0 ? (
+            <div className="px-6 py-14 text-center">
+              <FileText className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
+              <p className="font-medium text-foreground">
+                {items.length === 0 ? "Belum ada SOP" : "Tidak ada SOP yang cocok"}
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                {items.length === 0
+                  ? "Mulai dari AI, template, atau dokumen kosong."
+                  : "Ubah kata pencarian atau filter status untuk melihat dokumen lain."}
+              </p>
+              {items.length === 0 ? (
+                <Button className="mt-5 gap-2" onClick={() => setIsCreateOpen(true)}>
+                  <Plus className="h-4 w-4" /> Buat SOP pertama
+                </Button>
+              ) : null}
+            </div>
+          ) : (
             <div className="divide-y divide-border">
-              {items.map((sop) => (
+              {visibleItems.map((sop) => (
                 <a
                   key={sop.id}
                   href={sop.detailSopId ? `/workspaces/${workspaceId}/sops/${sop.detailSopId}` : "#"}
-                  className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-muted/40"
+                  className="group flex items-center justify-between gap-4 px-4 py-4 transition-colors hover:bg-muted/40 sm:px-5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-foreground">{sop.judul}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {sop.nomorSop ?? "Belum ada nomor"} · Versi {sop.versi ?? 1}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-medium text-foreground group-hover:text-primary">
+                        {sop.judul}
+                      </p>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-xs font-medium",
+                          sop.status === "DRAFT" && "bg-amber-50 text-amber-700",
+                          sop.status === "COMPLETED" && "bg-emerald-50 text-emerald-700",
+                          sop.status === "ARCHIVED" && "bg-slate-100 text-slate-600",
+                        )}
+                      >
+                        {sop.statusLabel}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {sop.nomorSop ?? "Belum ada nomor"} · v{sop.versi ?? 1} · Diperbarui {formatUpdatedAt(sop.terakhirDiperbarui)}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                    {sop.statusLabel}
+                  <span className="shrink-0 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+                    Buka →
                   </span>
                 </a>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
+
+      <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{createSource ? "Siapkan SOP baru" : "Buat SOP baru"}</DialogTitle>
+            <DialogDescription>
+              {createSource
+                ? "Lengkapi informasi minimum. Detail lainnya dapat disusun setelah draft dibuat."
+                : "Pilih cara memulai yang paling sesuai dengan kondisi dokumen Anda."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {createSource === null ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {CREATE_OPTIONS.map(({ id, title, description, badge, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => chooseSource(id)}
+                  className={cn(
+                    "relative flex min-h-48 flex-col rounded-xl border p-4 text-left transition-all",
+                    id === "ai"
+                      ? "border-primary/40 bg-primary-subtle/40 hover:border-primary hover:bg-primary-subtle/70"
+                      : "border-border bg-background hover:border-primary/40 hover:bg-muted/40",
+                  )}
+                >
+                  {badge ? (
+                    <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
+                      {badge}
+                    </span>
+                  ) : null}
+                  <span className="mb-8 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-foreground">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="mt-auto text-base font-semibold text-foreground">{title}</span>
+                  <span className="mt-1.5 text-sm leading-5 text-muted-foreground">{description}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <form onSubmit={onSubmit} className="space-y-5">
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-3 py-2.5">
+                <div className="flex items-center gap-2 text-sm">
+                  {createSource === "ai" ? <Sparkles className="h-4 w-4" /> : null}
+                  {createSource === "template" ? <LayoutTemplate className="h-4 w-4" /> : null}
+                  {createSource === "blank" ? <FilePlus2 className="h-4 w-4" /> : null}
+                  <span className="font-medium text-foreground">
+                    {CREATE_OPTIONS.find((option) => option.id === createSource)?.title}
+                  </span>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateSource(null)}>
+                  Ganti cara
+                </Button>
+              </div>
+
+              {createSource === "ai" ? (
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium text-foreground">
+                    Apa proses yang ingin Anda dokumentasikan?
+                    <Textarea
+                      value={deskripsiProses}
+                      onChange={(event) => {
+                        setDeskripsiProses(event.target.value);
+                        invalidateAiProposal();
+                      }}
+                      placeholder="Contoh: Proses dimulai ketika unit mengajukan dokumen. Admin memeriksa kelengkapan, evaluator menilai, lalu kepala bagian menyetujui hasil..."
+                      maxLength={8000}
+                      rows={6}
+                      className="mt-2 text-sm"
+                    />
+                    <span className="mt-1.5 block text-xs font-normal text-muted-foreground">
+                      Sebutkan pelaksana, aktivitas utama, keputusan penting, input, dan hasil proses.
+                    </span>
+                  </label>
+                  <details className="rounded-lg border border-border px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-medium text-foreground">Tambahkan konteks opsional</summary>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Tujuan proses
+                        <Textarea
+                          value={tujuanProses}
+                          onChange={(event) => {
+                            setTujuanProses(event.target.value);
+                            invalidateAiProposal();
+                          }}
+                          rows={3}
+                          maxLength={2000}
+                          className="mt-2"
+                        />
+                      </label>
+                      <label className="text-sm font-medium text-foreground">
+                        Catatan tambahan
+                        <Textarea
+                          value={catatanTambahan}
+                          onChange={(event) => {
+                            setCatatanTambahan(event.target.value);
+                            invalidateAiProposal();
+                          }}
+                          rows={3}
+                          maxLength={2000}
+                          className="mt-2"
+                        />
+                      </label>
+                    </div>
+                  </details>
+
+                  {aiAvailability.isSuccess && !aiEnabled ? (
+                    <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                      AI drafting belum aktif pada environment ini. Gunakan template atau dokumen kosong.
+                    </p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={onGenerateAiDraft}
+                    disabled={!aiEnabled || generateAiDraft.isPending || deskripsiProses.trim().length < 20}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {generateAiDraft.isPending ? "Menyusun draft…" : aiProposal ? "Generate ulang" : "Generate draft"}
+                  </Button>
+                  {generateAiDraft.isError ? (
+                    <p className="text-sm text-destructive">Draft AI gagal dibuat. Periksa deskripsi lalu coba lagi.</p>
+                  ) : null}
+                  {aiProposal ? (
+                    <div className="rounded-xl border border-border bg-muted/30 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{aiProposal.suggestedTitle}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {aiProposal.actors.length} pelaksana · {aiProposal.steps.length} langkah. Tinjau sebelum membuat draft.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                          Preview AI
+                        </span>
+                      </div>
+                      <ol className="mt-4 space-y-2">
+                        {aiProposal.steps.slice(0, 6).map((step) => (
+                          <li key={step.urutan} className="flex gap-3 text-sm">
+                            <span className="font-semibold text-muted-foreground">{step.urutan}.</span>
+                            <span className="text-foreground">
+                              {step.kegiatan}
+                              <span className="ml-2 text-muted-foreground">· {step.actorName}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                      {aiProposal.steps.length > 6 ? (
+                        <p className="mt-2 text-xs text-muted-foreground">+{aiProposal.steps.length - 6} langkah lainnya</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {createSource === "template" ? (
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium text-foreground">
+                    Template sistem
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(event) => setSelectedTemplateId(event.target.value)}
+                      disabled={templates.isLoading || templates.isError}
+                      className="mt-2 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Pilih template</option>
+                      {templateItems.map((template) => (
+                        <option key={template.templateId} value={template.templateId}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {preview ? (
+                    <div className="rounded-xl border border-border bg-muted/30 p-4">
+                      <p className="font-medium text-foreground">{preview.template.name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{preview.template.description}</p>
+                      <p className="mt-3 text-sm text-foreground">
+                        {preview.stepCount} langkah · {preview.actorsToReuse.length + preview.actorsToCreate.length} pelaksana
+                      </p>
+                    </div>
+                  ) : null}
+                  {templatePreview.isError ? <p className="text-sm text-destructive">Preview template gagal dimuat.</p> : null}
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm font-medium text-foreground sm:col-span-2">
+                  Judul SOP
+                  <Input
+                    value={judul}
+                    onChange={(event) => setJudul(event.target.value)}
+                    placeholder="Contoh: SOP Verifikasi Dokumen"
+                    maxLength={500}
+                    className="mt-2 h-11"
+                  />
+                </label>
+                <label className="text-sm font-medium text-foreground">
+                  Nomor SOP
+                  <Input
+                    value={nomorSop}
+                    onChange={(event) => setNomorSop(event.target.value)}
+                    placeholder="Contoh: SOP-ORG-001"
+                    maxLength={255}
+                    className="mt-2 h-11"
+                  />
+                </label>
+                {createSource === "template" || createSource === "ai" ? (
+                  <label className="text-sm font-medium text-foreground">
+                    Nama lembaga
+                    <Input
+                      value={namaLembaga}
+                      onChange={(event) => setNamaLembaga(event.target.value)}
+                      placeholder="Nama instansi / unit"
+                      maxLength={500}
+                      className="mt-2 h-11"
+                    />
+                  </label>
+                ) : null}
+              </div>
+
+              {createSop.isError ? <p className="text-sm text-destructive">Gagal membuat SOP.</p> : null}
+
+              <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between">
+                <Button type="button" variant="ghost" onClick={() => setCreateSource(null)}>
+                  ← Kembali
+                </Button>
+                <Button type="submit" disabled={!canCreate || createSop.isPending} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  {createSop.isPending ? "Membuat draft…" : "Buat dan lanjutkan"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

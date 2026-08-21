@@ -35,11 +35,11 @@ describe("workspace SOP template client contract", () => {
     });
   });
 
-  it("creation surface mempertahankan SOP kosong dan menyediakan jalur Dari Template", () => {
+  it("creation surface menyediakan jalur Mulai kosong dan Gunakan template", () => {
     const source = readFileSync("src/pages/workspaces/WorkspaceDetailPage.tsx", "utf8");
 
-    expect(source).toContain("SOP Kosong");
-    expect(source).toContain("Dari Template");
+    expect(source).toContain("Mulai kosong");
+    expect(source).toContain("Gunakan template");
     expect(source).toContain("namaLembaga");
     expect(source).toContain("previewTemplate");
     expect(source).toContain("createFromTemplate");
