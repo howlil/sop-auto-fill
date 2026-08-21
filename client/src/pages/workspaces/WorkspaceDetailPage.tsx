@@ -424,7 +424,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                     {CREATE_OPTIONS.find((option) => option.id === createSource)?.title}
                   </span>
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => chooseSource(createSource === "ai" ? "ai" : createSource === "template" ? "template" : "blank") || setCreateSource(null)}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateSource(null)}>
                   Ganti cara
                 </Button>
               </div>
