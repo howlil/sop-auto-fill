@@ -44,7 +44,7 @@ test('AI draft preview confirms into a normal SOP and preserves the existing lif
   await page.getByRole('link').filter({ hasText: workspaceName }).click()
   await waitForAppHydration(page)
 
-  await page.getByRole('button', { name: 'Buat SOP' }).click()
+  await page.getByRole('button', { name: 'Buat SOP', exact: true }).click()
   await page.getByRole('button', { name: 'Buat dengan AI' }).click()
   await page.getByLabel('Apa proses yang ingin Anda dokumentasikan?').fill(
     'Petugas menerima permohonan layanan, verifikator memeriksa kelengkapan, permohonan tidak lengkap dikembalikan, dan hasil layanan diserahkan setelah lengkap.',
