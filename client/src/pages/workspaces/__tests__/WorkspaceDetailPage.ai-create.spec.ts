@@ -97,22 +97,23 @@ describe("workspace SOP AI draft client contract", () => {
     });
   });
 
-  it("creation surface menyediakan Dengan AI, generate terpisah, preview read-only, warning review, dan confirmation", () => {
+  it("creation surface menyediakan jalur AI yang eksplisit, generate terpisah, preview, dan confirmation", () => {
     const source = readFileSync("src/pages/workspaces/WorkspaceDetailPage.tsx", "utf8");
 
     expect(source).toContain('type CreateSource = "blank" | "template" | "ai"');
-    expect(source).toContain("Dengan AI");
-    expect(source).toContain("Deskripsi proses");
-    expect(source).toContain("Tujuan proses (opsional)");
-    expect(source).toContain("Catatan tambahan (opsional)");
-    expect(source).toContain("Generate Draft");
+    expect(source).toContain("Buat SOP");
+    expect(source).toContain("Buat dengan AI");
+    expect(source).toContain("Direkomendasikan");
+    expect(source).toContain("Apa proses yang ingin Anda dokumentasikan?");
+    expect(source).toContain("Tambahkan konteks opsional");
+    expect(source).toContain("Tujuan proses");
+    expect(source).toContain("Catatan tambahan");
+    expect(source).toContain("Generate draft");
+    expect(source).toContain("Preview AI");
     expect(source).toContain("aiDraftAvailability");
     expect(source).toContain("generateAiDraft");
     expect(source).toContain("createFromAiDraft");
-    expect(source).toContain("Konten ini dihasilkan AI dan harus ditinjau sebelum digunakan.");
-    expect(source).toContain("Aktor dipakai ulang");
-    expect(source).toContain("Aktor baru");
-    expect(source).toContain("Buat Draft SOP");
     expect(source).toContain("aiProposal");
+    expect(source).toContain("Buat dan lanjutkan");
   });
 });
