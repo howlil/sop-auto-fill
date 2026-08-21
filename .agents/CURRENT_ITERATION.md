@@ -1,14 +1,16 @@
 # Current Iteration
 
-- **Iteration:** `7-product-workflow-redesign`
-- **Status:** `ACTIVE`
-- **Working branch:** `feat/product-workflow-redesign`
-- **Pull request:** `#9`
-- **Goal:** merombak end-to-end workflow dan UI authoring SOP agar task-oriented, mudah dipahami user baru, dan tetap mempertahankan backend/domain/AI safety boundary Iteration 1-6.
-- **Design spec:** `docs/superpowers/specs/2026-08-21-product-workflow-redesign-design.md`
-- **Implementation plan:** `docs/superpowers/plans/2026-08-21-product-workflow-redesign.md`
+- **Iteration:** `none`
+- **Status:** `IDLE`
+- **Working branch:** `none`
+- **Pull request:** `none`
+- **Goal:** tidak ada product iteration aktif. Iteration berikutnya hanya dimulai setelah instruksi user eksplisit.
 
-## Approved Product Flow
+## Last Completed Iteration
+
+Iteration 7 `product-workflow-redesign` sudah squash-merged ke `master` melalui PR #9 sebagai `474c5a317c817560c3923a8fd5e726da9084e501`.
+
+### Delivered Product Flow
 
 ```text
 LOGIN
@@ -29,27 +31,14 @@ LOGIN
                  -> PDF / Create New Version
 ```
 
-## Product Principles
+### Verification
 
-- Satu primary action per screen/section.
-- Navigation mengikuti task user, bukan struktur module internal.
-- Edit-first, preview-second.
-- Pelaksana dapat dikelola dalam konteks penyusunan SOP; workspace tidak memaksa setup pelaksana sebelum authoring.
-- AI menjadi contextual capability dan review stage, bukan navigation domain utama.
-- Diagram adalah generated view; manual path editing menjadi advanced secondary action.
-- Completion adalah explicit lifecycle transition dengan readiness check, bukan sekadar tombol `Selesai` generik.
-- Version/activity tetap tersedia tetapi tidak mendominasi authoring workflow.
+CI #382 untuk head final Iteration 7 lulus penuh:
+- server: success
+- client: success
+- e2e: success (5/5 journeys)
+- production-compose: success
 
-## Non-Negotiable Technical Boundaries
+## Execution Lock
 
-- Tidak ada Prisma schema/migration pada iteration ini.
-- Tidak mengubah ownership, DRAFT/COMPLETED/ARCHIVED semantics, immutable completed version, atau create-new-version behavior.
-- Tidak memberi AI direct database write path.
-- Existing autosave tetap persistence boundary untuk editing.
-- Existing AI Draft / AI Review / AI Revision API contracts dipertahankan kecuali adapter frontend yang backward-compatible.
-- Existing Flowchart/BPMN generation dan PDF/export tetap dipertahankan.
-- Iteration selesai hanya setelah client tests/build dan lifecycle E2E utama kembali hijau.
-
-## Last Completed Iteration
-
-Iteration 6 `ai-assisted-revision` sudah squash-merged ke `master` melalui PR #8 sebagai `448e12af5ee0ff533dd426719ad696f16d6c1ffb`.
+Jangan memulai iteration product berikutnya secara otomatis. Update file ini terlebih dahulu hanya setelah ada instruksi user eksplisit untuk iteration baru.
