@@ -1,0 +1,414 @@
+generator client {
+  provider       = "prisma-client-js"
+  output         = "../src/generated/prisma"
+  jsModuleFormat = "cjs"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// Authenticated Google account. `googleSub` is the stable external identity key.
+model User {
+  userId          String       @id @default(uuid()) @db.Char(36)
+  googleSub       String       @unique @db.VarChar(255)
+  email           String       @db.VarChar(320)
+  name            String       @db.VarChar(255)
+  avatarUrl       String?      @db.Text
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  workspaces      Workspace[]
+  peraturan       Peraturan[]
+  detailSopDibuat DetailSOP[]  @relation("SOPDibuatOleh")
+  detailSopDiedit DetailSOP[]  @relation("SOPDieditOleh")
+  logEditSop      LogEditSOP[]
+
+  @@index([email])
+}
+
+/// Private project/folder owned by exactly one user in V1.
+model Workspace {
+  workspaceId String      @id @default(uuid()) @db.Char(36)
+  ownerId     String      @db.Char(36)
+  name        String      @db.VarChar(120)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  owner       User        @relation(fields: [ownerId], references: [userId], onDelete: Cascade)
+  sop         SOP[]
+  pelaksana   Pelaksana[]
+
+  @@index([ownerId, updatedAt])
+}
+
+/// User-owned regulation library referenced by SOP versions.
+model Peraturan {
+  peraturanId String       @id @default(uuid()) @db.Char(36)
+  ownerId     String       @db.Char(36)
+  nama        String       @db.VarChar(255)
+  nomor       String       @db.VarChar(120)
+  tahun       Int
+  tentang     String       @db.VarChar(500)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  owner       User         @relation(fields: [ownerId], references: [userId], onDelete: Cascade)
+  dasarHukum  DasarHukum[]
+
+  @@unique([ownerId, nomor, tahun])
+  @@index([ownerId, nama])
+}
+
+/// SOP project. Status is project-level, while `DetailSOP` stores immutable/editable version snapshots.
+model SOP {
+  sopId       String      @id @default(uuid()) @db.Char(36)
+  workspaceId String      @db.Char(36)
+  judul       String      @db.VarChar(500)
+  status      StatusSOP   @default(DRAFT)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  detailSops  DetailSOP[]
+  workspace   Workspace   @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade)
+
+  @@index([workspaceId, status, updatedAt])
+}
+
+/// Version snapshot for an SOP project. Existing authoring/rendering relations intentionally stay stable.
+model DetailSOP {
+  detailSopId                    String                           @id @default(uuid()) @db.Char(36)
+  sopId                          String                           @db.Char(36)
+  versi                          Int                              @default(1)
+  nomorSOP                       String                           @db.VarChar(255)
+  tanggalPembuatan               DateTime                         @default(now())
+  tanggalRevisi                  DateTime?
+  tanggalEfektif                 DateTime?
+  namaLembaga                    String                           @db.VarChar(500)
+  dibuatOlehId                   String?                          @db.Char(36)
+  terakhirDieditOlehId           String?                          @db.Char(36)
+  revisiDariDetailSopId          String?                          @db.Char(36)
+  createdAt                      DateTime                         @default(now())
+  updatedAt                      DateTime                         @updatedAt
+  revisiDari                     DetailSOP?                       @relation("RevisiDariVersi", fields: [revisiDariDetailSopId], references: [detailSopId], onDelete: Restrict)
+  revisiMenjadi                  DetailSOP[]                      @relation("RevisiDariVersi")
+  dasarHukum                     DasarHukum[]
+  dibuatOleh                     User?                            @relation("SOPDibuatOleh", fields: [dibuatOlehId], references: [userId], onDelete: SetNull)
+  sop                            SOP                              @relation(fields: [sopId], references: [sopId], onDelete: Cascade)
+  terakhirDieditOleh             User?                            @relation("SOPDieditOleh", fields: [terakhirDieditOlehId], references: [userId], onDelete: SetNull)
+  swimlanes                      DetailSOPPelaksana[]
+  lampiranPeringatan             LampiranPeringatan[]
+  lampiranKualifikasiPelaksanaan LampiranKualifikasiPelaksanaan[]
+  lampiranPeralatanPerlengkapan  LampiranPeralatanPerlengkapan[]
+  lampiranPencatatanPendataan    LampiranPencatatanPendataan[]
+  langkahSOP                     LangkahSOP[]
+  logEditSop                     LogEditSOP[]
+  relasiSopKeluar                SopTerkait[]                     @relation("RelasiSOP")
+  relasiSopMasuk                 SopTerkait[]                     @relation("RelasiSOPTerkait")
+  konfigurasiDiagram             KonfigurasiDiagramSOP[]
+
+  @@unique([sopId, versi])
+  @@index([sopId, versi])
+  @@index([revisiDariDetailSopId])
+}
+
+model LampiranPeringatan {
+  lampiranPeringatanId String    @id @default(uuid()) @db.Char(36)
+  detailSopId          String    @db.Char(36)
+  teks                 String    @db.Text
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  detailSop            DetailSOP @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@index([detailSopId])
+}
+
+model LampiranKualifikasiPelaksanaan {
+  lampiranKualifikasiPelaksanaanId String    @id @default(uuid()) @db.Char(36)
+  detailSopId                      String    @db.Char(36)
+  teks                             String    @db.Text
+  createdAt                        DateTime  @default(now())
+  updatedAt                        DateTime  @updatedAt
+  detailSop                        DetailSOP @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@index([detailSopId])
+}
+
+model LampiranPeralatanPerlengkapan {
+  lampiranPeralatanPerlengkapanId String    @id @default(uuid()) @db.Char(36)
+  detailSopId                     String    @db.Char(36)
+  teks                            String    @db.Text
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+  detailSop                       DetailSOP @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@index([detailSopId])
+}
+
+model LampiranPencatatanPendataan {
+  lampiranPencatatanPendataanId String    @id @default(uuid()) @db.Char(36)
+  detailSopId                   String    @db.Char(36)
+  teks                          String    @db.Text
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+  detailSop                     DetailSOP @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@index([detailSopId])
+}
+
+model DasarHukum {
+  detailSopId String    @db.Char(36)
+  peraturanId String    @db.Char(36)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  peraturan   Peraturan @relation(fields: [peraturanId], references: [peraturanId], onDelete: Restrict)
+  detailSop   DetailSOP @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@id([detailSopId, peraturanId])
+  @@index([peraturanId])
+}
+
+model SopTerkait {
+  detailSopId        String    @db.Char(36)
+  detailSopTerkaitId String    @db.Char(36)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sop                DetailSOP @relation("RelasiSOP", fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+  sopTerkait         DetailSOP @relation("RelasiSOPTerkait", fields: [detailSopTerkaitId], references: [detailSopId], onDelete: Cascade)
+
+  @@id([detailSopId, detailSopTerkaitId])
+  @@index([detailSopTerkaitId])
+}
+
+model LangkahSOP {
+  langkahSopId               String                    @id @default(uuid()) @db.Char(36)
+  detailSopId                String                    @db.Char(36)
+  kegiatan                   String                    @db.VarChar(500)
+  jenis                      JenisLangkahProsedur      @default(KEGIATAN)
+  urutan                     Int
+  kelengkapan                String                    @db.VarChar(500)
+  keluaran                   String                    @db.VarChar(500)
+  waktu                      Int
+  satuanWaktu                SatuanWaktu
+  keterangan                 String                    @db.VarChar(500)
+  pelaksanaId                String                    @db.Char(36)
+  langkahSelanjutnyaYaId     String?                   @db.Char(36)
+  langkahSelanjutnyaTidakId  String?                   @db.Char(36)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  langkahTidak               LangkahSOP?               @relation("LangkahTidak", fields: [langkahSelanjutnyaTidakId], references: [langkahSopId], onDelete: SetNull)
+  langkahSebelumTidak        LangkahSOP[]              @relation("LangkahTidak")
+  langkahYa                  LangkahSOP?               @relation("LangkahYa", fields: [langkahSelanjutnyaYaId], references: [langkahSopId], onDelete: SetNull)
+  langkahSebelumYa           LangkahSOP[]              @relation("LangkahYa")
+  overridePanahSebagaiSumber OverridePanahDiagramSOP[] @relation("OverridePanahDariLangkah")
+  overridePanahSebagaiTujuan OverridePanahDiagramSOP[] @relation("OverridePanahKeLangkah")
+  pelaksana                  Pelaksana                 @relation(fields: [pelaksanaId], references: [pelaksanaId], onDelete: Restrict)
+  detailSop                  DetailSOP                 @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@unique([detailSopId, urutan])
+  @@index([pelaksanaId])
+  @@index([langkahSelanjutnyaYaId])
+  @@index([langkahSelanjutnyaTidakId])
+}
+
+/// Reusable actor/swimlane labels scoped to a workspace.
+model Pelaksana {
+  pelaksanaId String               @id @default(uuid()) @db.Char(36)
+  workspaceId String               @db.Char(36)
+  nama        String               @db.VarChar(255)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  sopDetails  DetailSOPPelaksana[]
+  langkahSOP  LangkahSOP[]
+  workspace   Workspace            @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, nama])
+  @@index([workspaceId])
+}
+
+model DetailSOPPelaksana {
+  detailSopId String    @db.Char(36)
+  pelaksanaId String    @db.Char(36)
+  urutan      Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  pelaksana   Pelaksana @relation(fields: [pelaksanaId], references: [pelaksanaId], onDelete: Restrict)
+  detailSop   DetailSOP @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@id([detailSopId, pelaksanaId])
+  @@index([pelaksanaId])
+}
+
+/// Authoring activity log retained because editor autosave/concurrency uses it.
+model LogEditSOP {
+  detailSopId     String                  @db.Char(36)
+  penggunaId      String                  @db.Char(36)
+  createdAt       DateTime                @default(now()) @db.DateTime(3)
+  bagian          BagianSOP               @default(HEADER)
+  keterangan      String?                 @db.Text
+  sesiChangeCount Int                     @default(1)
+  closedAt        DateTime?               @db.DateTime(3)
+  updatedAt       DateTime                @updatedAt @db.DateTime(3)
+  detailSop       DetailSOP               @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+  pengguna        User                    @relation(fields: [penggunaId], references: [userId], onDelete: Cascade)
+  domainFields    LogEditSopDomainField[]
+
+  @@id([detailSopId, penggunaId, createdAt])
+  @@index([detailSopId, penggunaId, bagian, closedAt])
+  @@index([detailSopId, createdAt])
+}
+
+model LogEditSopDomainField {
+  detailSopId  String     @db.Char(36)
+  penggunaId   String     @db.Char(36)
+  logCreatedAt DateTime   @db.DateTime(3)
+  domainField  String     @db.VarChar(64)
+  logEditSop   LogEditSOP @relation(fields: [detailSopId, penggunaId, logCreatedAt], references: [detailSopId, penggunaId, createdAt], onDelete: Cascade)
+
+  @@id([detailSopId, penggunaId, logCreatedAt, domainField])
+}
+
+enum StatusSOP {
+  DRAFT
+  COMPLETED
+  ARCHIVED
+}
+
+enum JenisLangkahProsedur {
+  AWAL_AKHIR
+  KEGIATAN
+  KEPUTUSAN
+}
+
+enum SatuanWaktu {
+  m
+  h
+  d
+  w
+  mo
+  y
+}
+
+enum BagianSOP {
+  HEADER
+  LANGKAH
+  STATUS
+}
+
+enum JenisDiagram {
+  FLOWCHART
+  BPMN
+}
+
+enum CabangDiagram {
+  UTAMA
+  YA
+  TIDAK
+}
+
+enum SisiPanahDiagram {
+  top
+  bottom
+  left
+  right
+}
+
+model KonfigurasiDiagramSOP {
+  detailSopId   String                    @db.Char(36)
+  jenis         JenisDiagram
+  layoutSeed    Int                       @default(0)
+  updatedAt     DateTime                  @updatedAt
+  overridePanah OverridePanahDiagramSOP[]
+  overrideLabel OverrideLabelDiagramSOP[]
+  detailSop     DetailSOP                 @relation(fields: [detailSopId], references: [detailSopId], onDelete: Cascade)
+
+  @@id([detailSopId, jenis])
+  @@index([detailSopId])
+}
+
+model OverridePanahDiagramSOP {
+  detailSopId        String                      @db.Char(36)
+  jenis              JenisDiagram
+  dariLangkahSopId   String                      @db.Char(36)
+  keLangkahSopId     String                      @db.Char(36)
+  cabang             CabangDiagram
+  sSide              SisiPanahDiagram
+  eSide              SisiPanahDiagram
+  startX             Float
+  startY             Float
+  endX               Float
+  endY               Float
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  konfigurasiDiagram KonfigurasiDiagramSOP       @relation(fields: [detailSopId, jenis], references: [detailSopId, jenis], onDelete: Cascade)
+  dariLangkah        LangkahSOP                  @relation("OverridePanahDariLangkah", fields: [dariLangkahSopId], references: [langkahSopId], onDelete: Cascade)
+  keLangkah          LangkahSOP                  @relation("OverridePanahKeLangkah", fields: [keLangkahSopId], references: [langkahSopId], onDelete: Cascade)
+  titikTekuk         TitikTekukPanahDiagramSOP[]
+
+  @@id([detailSopId, jenis, dariLangkahSopId, keLangkahSopId, cabang])
+  @@index([dariLangkahSopId])
+  @@index([keLangkahSopId])
+}
+
+model TitikTekukPanahDiagramSOP {
+  detailSopId      String                  @db.Char(36)
+  jenis            JenisDiagram
+  dariLangkahSopId String                  @db.Char(36)
+  keLangkahSopId   String                  @db.Char(36)
+  cabang           CabangDiagram
+  urutan           Int
+  x                Float
+  y                Float
+  overridePanah    OverridePanahDiagramSOP @relation(fields: [detailSopId, jenis, dariLangkahSopId, keLangkahSopId, cabang], references: [detailSopId, jenis, dariLangkahSopId, keLangkahSopId, cabang], onDelete: Cascade)
+
+  @@id([detailSopId, jenis, dariLangkahSopId, keLangkahSopId, cabang, urutan])
+}
+
+model OverrideLabelDiagramSOP {
+  detailSopId        String                @db.Char(36)
+  jenis              JenisDiagram
+  kunciLabel         String                @db.VarChar(64)
+  posisiX            Float
+  posisiY            Float
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  konfigurasiDiagram KonfigurasiDiagramSOP @relation(fields: [detailSopId, jenis], references: [detailSopId, jenis], onDelete: Cascade)
+
+  @@id([detailSopId, jenis, kunciLabel])
+}
+
+/// Read-only system template used as a deterministic starting point for new SOP drafts.
+model SopTemplate {
+  templateId             String            @id @default(uuid()) @db.Char(36)
+  key                    String            @unique @db.VarChar(120)
+  name                   String            @db.VarChar(255)
+  description            String            @db.VarChar(500)
+  version                Int
+  isActive               Boolean           @default(true)
+  peringatan             Json
+  kualifikasiPelaksanaan Json
+  peralatanPerlengkapan  Json
+  pencatatanPendataan    Json
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  steps                  SopTemplateStep[]
+}
+
+/// Ordered procedure step owned by a system template. Decision targets refer to template step order.
+model SopTemplateStep {
+  templateStepId    String               @id @default(uuid()) @db.Char(36)
+  templateId        String               @db.Char(36)
+  urutan            Int
+  kegiatan          String               @db.VarChar(500)
+  jenis             JenisLangkahProsedur @default(KEGIATAN)
+  kelengkapan       String               @db.VarChar(500)
+  keluaran          String               @db.VarChar(500)
+  waktu             Int
+  satuanWaktu       SatuanWaktu
+  keterangan        String               @db.VarChar(500)
+  actorName         String               @db.VarChar(255)
+  targetYaUrutan    Int?
+  targetTidakUrutan Int?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  template          SopTemplate          @relation(fields: [templateId], references: [templateId], onDelete: Cascade)
+
+  @@unique([templateId, urutan])
+  @@index([templateId])
+}
