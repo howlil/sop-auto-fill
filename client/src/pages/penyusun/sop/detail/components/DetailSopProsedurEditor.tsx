@@ -191,7 +191,7 @@ export function DetailSOPProsedurEditor({
                     index={realIdx}
                     totalRows={prosedurRows.length}
                     stepOrderById={stepOrderById}
-                    normalizePosition={false}
+                    normalizePosition={!readOnly}
                     onTypeChange={(type, role) => !readOnly && handleTypeChange(realIdx, type, role)}
                   />
                 </div>
