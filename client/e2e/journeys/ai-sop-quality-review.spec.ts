@@ -17,7 +17,7 @@ async function openEditorSection(page: Page, section: string): Promise<void> {
 
 async function openReview(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Review & Complete' }).click()
-  await expect(page.getByRole('heading', { name: 'Review' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeVisible()
 }
 
 async function completeCurrentVersion(page: Page, version: number): Promise<void> {
